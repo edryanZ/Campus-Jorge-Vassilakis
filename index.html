@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Mapa interativo do Campus Jorge Vassilakis – UNIR Guajará-Mirim" />
+  <title>Mapa do Campus Jorge Vassilakis</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">UNIR</div>
+      <div>
+        <strong>Campus Jorge Vassilakis</strong>
+        <span>UNIR Guajará-Mirim</span>
+      </div>
+    </div>
+
+    <label class="search-box">
+      <span class="sr-only">Buscar uma sala ou setor</span>
+      <input id="searchInput" type="search" placeholder="Buscar sala, setor ou bloco…" autocomplete="off" />
+      <kbd>Ctrl K</kbd>
+    </label>
+
+    <div class="top-actions">
+      <button id="resetViewBtn" type="button" title="Restaurar visualização">Centralizar</button>
+      <button id="printBtn" type="button" title="Imprimir mapa">Imprimir</button>
+    </div>
+  </header>
+
+  <main class="app-shell">
+    <aside class="sidebar" aria-label="Filtros e legenda">
+      <section>
+        <div class="section-heading">
+          <h2>Explorar</h2>
+          <button id="clearFiltersBtn" class="text-button" type="button">Limpar</button>
+        </div>
+        <div id="categoryFilters" class="filter-list"></div>
+      </section>
+
+      <section>
+        <h2>Pavimento do Bloco K</h2>
+        <div class="segmented-control" role="group" aria-label="Escolher pavimento do Bloco K">
+          <button class="floor-btn is-active" data-floor="inferior" type="button">Inferior</button>
+          <button class="floor-btn" data-floor="superior" type="button">Superior</button>
+        </div>
+      </section>
+
+      <section>
+        <h2>Legenda</h2>
+        <div id="legend" class="legend-list"></div>
+      </section>
+
+      <section class="help-card">
+        <strong>Como usar</strong>
+        <p>Clique em uma sala para ver os detalhes. Use a roda do mouse para ampliar e arraste o mapa para mover.</p>
+      </section>
+    </aside>
+
+    <section class="map-panel" aria-label="Mapa interativo do campus">
+      <div class="map-toolbar">
+        <div class="zoom-controls" aria-label="Controles de zoom">
+          <button id="zoomInBtn" type="button" aria-label="Aumentar zoom">+</button>
+          <button id="zoomOutBtn" type="button" aria-label="Diminuir zoom">−</button>
+        </div>
+        <div class="map-badges">
+          <span>Mapa esquemático</span>
+          <span id="resultCount">0 locais</span>
+        </div>
+      </div>
+
+      <div id="mapViewport" class="map-viewport">
+        <svg id="campusMap" viewBox="0 0 1500 920" role="img" aria-labelledby="mapTitle mapDesc">
+          <title id="mapTitle">Mapa interativo do Campus Jorge Vassilakis</title>
+          <desc id="mapDesc">Planta esquemática com blocos, salas, estacionamentos, vias internas, campo de futebol, SAFs, viveiro e Bloco K.</desc>
+          <defs>
+            <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+              <feDropShadow dx="0" dy="5" stdDeviation="8" flood-color="#0f172a" flood-opacity="0.14" />
+            </filter>
+            <pattern id="unpavedPattern" width="14" height="14" patternUnits="userSpaceOnUse">
+              <rect width="14" height="14" fill="#bda886" />
+              <circle cx="3" cy="4" r="1.1" fill="#8e795c" opacity=".6" />
+              <circle cx="10" cy="9" r="1" fill="#8e795c" opacity=".5" />
+            </pattern>
+            <pattern id="walkwayPattern" width="10" height="10" patternUnits="userSpaceOnUse">
+              <rect width="10" height="10" fill="#eef2f6" />
+              <path d="M0 10L10 0" stroke="#cbd5e1" stroke-width="1" opacity=".55" />
+            </pattern>
+          </defs>
+
+          <g id="panZoomLayer">
+            <!-- Organização geral baseada na planta enviada -->
+            <rect class="site-background" x="20" y="20" width="1460" height="880" rx="32" />
+            <rect class="boundary-green" x="45" y="45" width="1410" height="830" rx="28" />
+
+            <!-- Vias internas: eixo lateral esquerdo e conexão até o Bloco K -->
+            <rect class="road road-vertical" x="95" y="90" width="92" height="540" rx="14" />
+            <rect class="road road-horizontal" x="95" y="555" width="1125" height="72" rx="16" />
+            <rect class="road road-inner" x="620" y="105" width="72" height="470" rx="12" />
+            <rect class="road road-inner" x="690" y="270" width="530" height="66" rx="14" />
+            <path class="road-unpaved" d="M1110 610 C1210 650 1280 705 1360 790" />
+
+            <!-- Entrada principal localizada na lateral esquerda, conforme a planta -->
+            <g id="entranceGroup" class="map-feature fixed-feature" data-id="entrada">
+              <rect class="feature-shell entrance-shell" x="38" y="535" width="150" height="105" rx="18" />
+              <text class="feature-title" x="113" y="568" text-anchor="middle">PORTARIA</text>
+              <text class="feature-subtitle" x="113" y="593" text-anchor="middle">ENTRADA / SAÍDA</text>
+              <path d="M78 612H148" stroke="#0f172a" stroke-width="5" stroke-linecap="round" />
+              <path d="M88 602L76 612L88 622M138 602L150 612L138 622" fill="none" stroke="#0f172a" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" />
+            </g>
+
+            <!-- Estacionamentos e canteiro central -->
+            <g id="publicParking" class="map-feature fixed-feature" data-id="estacionamento-publico">
+              <rect class="parking-shell" x="205" y="198" width="305" height="92" rx="18" />
+              <text class="feature-title" x="357" y="224" text-anchor="middle">ESTACIONAMENTO PÚBLICO</text>
+              <g class="parking-lines">
+                <path d="M225 242H490M225 274H490" />
+                <path d="M245 242V274M280 242V274M315 242V274M350 242V274M385 242V274M420 242V274M455 242V274" />
+              </g>
+              <rect class="median" x="255" y="249" width="205" height="18" rx="9" />
+              <text class="tiny-label" x="357" y="263" text-anchor="middle">CANTEIRO CENTRAL</text>
+            </g>
+
+            <g id="staffParking" class="map-feature fixed-feature" data-id="estacionamento-servidores">
+              <rect class="parking-shell" x="305" y="282" width="315" height="42" rx="12" />
+              <text class="feature-title" x="462" y="308" text-anchor="middle">ESTACIONAMENTO DE SERVIDORES</text>
+            </g>
+
+            <!-- Calçadas acompanhando os principais blocos -->
+            <g class="walkways" aria-hidden="true">
+              <rect x="205" y="94" width="430" height="18" rx="8" />
+              <rect x="205" y="292" width="430" height="18" rx="8" />
+              <rect x="205" y="396" width="430" height="18" rx="8" />
+              <rect x="205" y="496" width="430" height="18" rx="8" />
+              <rect x="205" y="605" width="705" height="18" rx="8" />
+              <rect x="605" y="105" width="18" height="500" rx="8" />
+            </g>
+
+            <!-- Estruturas externas superiores e laterais -->
+            <g id="oldStorage" class="map-feature fixed-feature" data-id="deposito-antigo">
+              <rect class="feature-shell neutral-shell" x="865" y="82" width="285" height="118" rx="18" />
+              <text class="feature-title" x="1008" y="112" text-anchor="middle">DEPÓSITO ANTIGO</text>
+              <text class="feature-subtitle" x="890" y="144">• Depósito</text>
+              <text class="feature-subtitle" x="890" y="174">• Copa dos agentes de limpeza</text>
+            </g>
+
+            <g id="safs" class="map-feature fixed-feature" data-id="safs">
+              <rect class="feature-shell green-shell" x="1210" y="82" width="210" height="112" rx="18" />
+              <text class="feature-title" x="1315" y="117" text-anchor="middle">SISTEMA</text>
+              <text class="feature-title" x="1315" y="142" text-anchor="middle">AGROFLORESTAL</text>
+              <text class="feature-subtitle" x="1315" y="168" text-anchor="middle">(SAFs)</text>
+            </g>
+
+            <g id="nursery" class="map-feature fixed-feature" data-id="viveiro">
+              <rect class="feature-shell green-shell" x="1280" y="214" width="140" height="72" rx="18" />
+              <text class="feature-title" x="1350" y="258" text-anchor="middle">VIVEIRO</text>
+            </g>
+
+            <!-- Campo de futebol na parte inferior da planta -->
+            <g id="footballField" class="map-feature fixed-feature" data-id="campo-futebol">
+              <rect class="field-shell" x="185" y="660" width="770" height="195" rx="18" />
+              <rect class="field-line" x="210" y="681" width="720" height="153" rx="4" />
+              <path class="field-line" d="M570 681V834M210 758H930" />
+              <circle class="field-line" cx="570" cy="758" r="30" />
+              <text class="field-title" x="570" y="770" text-anchor="middle">CAMPO DE FUTEBOL</text>
+            </g>
+
+            <!-- Estruturas desenhadas via JavaScript -->
+            <g id="buildingsLayer"></g>
+            <g id="routeLayer" aria-hidden="true"></g>
+          </g>
+        </svg>
+
+        <div id="mapTooltip" class="map-tooltip" hidden></div>
+      </div>
+    </section>
+
+    <aside id="detailsPanel" class="details-panel" aria-live="polite">
+      <div class="details-empty">
+        <div class="empty-icon">⌖</div>
+        <h2>Selecione um local</h2>
+        <p>Clique em qualquer sala, bloco ou estrutura externa para visualizar as informações.</p>
+      </div>
+    </aside>
+  </main>
+
+  <template id="detailsTemplate">
+    <article class="details-content">
+      <div class="details-color-bar"></div>
+      <div class="details-heading">
+        <div>
+          <span class="details-eyebrow"></span>
+          <h2 class="details-title"></h2>
+        </div>
+        <button class="details-close" type="button" aria-label="Fechar detalhes">×</button>
+      </div>
+      <p class="details-description"></p>
+      <dl class="details-list"></dl>
+      <div class="details-actions">
+        <button class="primary-action route-action" type="button">Mostrar rota desde a entrada</button>
+        <button class="secondary-action focus-action" type="button">Centralizar no mapa</button>
+      </div>
+    </article>
+  </template>
+
+  <script src="app.js"></script>
+</body>
+</html>
