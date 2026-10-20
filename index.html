@@ -26,6 +26,7 @@
     </label>
 
     <div class="top-actions">
+      <button id="auditCenterBtn" type="button" title="Consultar auditorias">Auditorias</button>
       <button id="authBtn" type="button" title="Entrar para sincronizar auditorias">Entrar</button>
       <button id="resetViewBtn" type="button" title="Restaurar visualização">Centralizar</button>
       <button id="printBtn" type="button" title="Imprimir mapa">Imprimir</button>
@@ -267,6 +268,27 @@
         <button id="syncNowBtn" class="audit-secondary" type="button" hidden>Sincronizar agora</button>
         <p class="audit-note">Sem acesso, os registros continuam salvos localmente neste navegador. A sincronização exige usuário autorizado no Supabase.</p>
       </div>
+    </section>
+  </div>
+
+  <div id="auditCenterModal" class="audit-modal" hidden>
+    <div class="audit-backdrop" data-center-close></div>
+    <section class="audit-sheet audit-center-sheet" role="dialog" aria-modal="true" aria-labelledby="auditCenterTitle">
+      <header class="audit-header">
+        <div><span class="audit-eyebrow">GESTÃO AMBIENTAL · UNIR</span><h2 id="auditCenterTitle">Central de Auditorias</h2></div>
+        <button class="audit-close" type="button" data-center-close aria-label="Fechar central de auditorias">×</button>
+      </header>
+      <div class="audit-center-controls">
+        <label for="auditCenterSearch">Buscar auditoria</label>
+        <input id="auditCenterSearch" type="search" placeholder="Sala, bloco, ambiente ou ID..." autocomplete="off" />
+        <label for="auditCenterFilter">Situação</label>
+        <select id="auditCenterFilter">
+          <option value="ALL">Todas</option><option value="ACTIVE">Em andamento</option>
+          <option value="COMPLETED">Concluídas</option><option value="PENDING">Pendentes de sincronização</option>
+        </select>
+        <p id="auditCenterSummary" aria-live="polite"></p>
+      </div>
+      <div id="auditCenterResults" class="audit-content audit-center-results" aria-live="polite"></div>
     </section>
   </div>
 
