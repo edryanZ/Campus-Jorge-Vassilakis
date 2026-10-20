@@ -4,7 +4,9 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="description" content="Mapa interativo do Campus Jorge Vassilakis – UNIR Guajará-Mirim" />
+  <meta name="theme-color" content="#071a33" />
   <title>Mapa do Campus Jorge Vassilakis</title>
+  <link rel="manifest" href="manifest.webmanifest" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -24,6 +26,7 @@
     </label>
 
     <div class="top-actions">
+      <button id="authBtn" type="button" title="Entrar para sincronizar auditorias">Entrar</button>
       <button id="resetViewBtn" type="button" title="Restaurar visualização">Centralizar</button>
       <button id="printBtn" type="button" title="Imprimir mapa">Imprimir</button>
     </div>
@@ -50,6 +53,13 @@
       <section>
         <h2>Legenda</h2>
         <div id="legend" class="legend-list"></div>
+        <div class="surface-legend" aria-label="Legenda das áreas e vias do campus">
+          <div class="legend-item"><span class="legend-swatch surface-parking"></span><span>Estacionamento</span></div>
+          <div class="legend-item"><span class="legend-swatch surface-median"></span><span>Canteiro central</span></div>
+          <div class="legend-item"><span class="legend-swatch surface-paved"></span><span>Via pavimentada</span></div>
+          <div class="legend-item"><span class="legend-swatch surface-unpaved"></span><span>Via não pavimentada</span></div>
+          <div class="legend-item"><span class="legend-swatch surface-walkway"></span><span>Calçada</span></div>
+        </div>
       </section>
 
       <section class="help-card">
@@ -94,76 +104,107 @@
             <rect class="site-background" x="20" y="20" width="1460" height="880" rx="32" />
             <rect class="boundary-green" x="45" y="45" width="1410" height="830" rx="28" />
 
-            <!-- Vias internas: eixo lateral esquerdo e conexão até o Bloco K -->
-            <rect class="road road-vertical" x="95" y="90" width="92" height="540" rx="14" />
-            <rect class="road road-horizontal" x="95" y="555" width="1125" height="72" rx="16" />
-            <rect class="road road-inner" x="620" y="105" width="72" height="470" rx="12" />
-            <rect class="road road-inner" x="690" y="270" width="530" height="66" rx="14" />
-            <path class="road-unpaved" d="M1110 610 C1210 650 1280 705 1360 790" />
+            <!-- Via lateral de circulação para motos, carros e bicicletas -->
+            <g id="lateralCirculationArea" aria-label="Via lateral de circulação">
+              <rect class="circulation-lane" x="120" y="92" width="112" height="466" rx="10" />
+              <rect class="central-median" x="163" y="124" width="26" height="190" rx="13" />
+              <rect class="central-median" x="163" y="338" width="26" height="184" rx="13" />
+              <g class="circulation-flow" aria-hidden="true">
+                <text x="207" y="465">↑</text>
+                <text x="207" y="270">↑</text>
+                <text x="176" y="116">↶</text>
+                <text x="143" y="220">↓</text>
+                <text x="143" y="415">↓</text>
+                <text x="176" y="333">↔</text>
+                <text x="176" y="548">↔</text>
+              </g>
+              <text class="circulation-side-label" x="130" y="325" text-anchor="middle" transform="rotate(-90 130 325)">CIRCULAÇÃO</text>
+            </g>
+
+            <!-- Via pavimentada da entrada -->
+            <rect class="road road-paved entrance-road" x="120" y="558" width="112" height="102" rx="6" />
+            <text class="entrance-flow-label" x="176" y="622" text-anchor="middle">↕</text>
+
+            <!-- Calçadas desenhadas sob as vias para preservar a hierarquia visual nos cruzamentos -->
+            <g class="walkways" aria-hidden="true">
+              <rect x="240" y="94" width="320" height="18" rx="8" />
+              <rect x="240" y="344" width="350" height="4" rx="2" />
+              <rect x="240" y="423" width="350" height="4" rx="2" />
+              <rect x="240" y="494" width="700" height="4" rx="2" />
+              <rect x="240" y="578" width="710" height="18" rx="8" />
+              <rect x="828" y="105" width="18" height="385" rx="8" />
+            </g>
+
+            <!-- Vias internas não pavimentadas marcadas em azul na planta-base -->
+            <g id="unpavedRoadNetwork" aria-label="Vias internas não pavimentadas">
+              <rect class="road-unpaved-area" x="605" y="365" width="370" height="48" rx="6" />
+              <rect class="road-unpaved-area" x="975" y="365" width="395" height="48" rx="6" />
+              <rect class="road-unpaved-area" x="880" y="380" width="50" height="260" rx="6" />
+              <rect class="road-unpaved-area" x="250" y="585" width="680" height="55" rx="6" />
+              <rect class="road-junction-patch" x="877" y="377" width="56" height="38" />
+              <rect class="road-junction-patch" x="877" y="582" width="50" height="55" />
+              <g class="road-direction" aria-hidden="true">
+                <path d="M635 389H945M1005 389H1340M905 410V610M280 612H900" />
+              </g>
+              <text class="road-flow-label" x="790" y="397" text-anchor="middle">← →</text>
+              <text class="road-flow-label" x="1172" y="397" text-anchor="middle">← →</text>
+              <text class="road-flow-label" x="905" y="520" text-anchor="middle">↑ ↓</text>
+              <text class="road-flow-label" x="590" y="620" text-anchor="middle">← →</text>
+            </g>
 
             <!-- Entrada principal localizada na lateral esquerda, conforme a planta -->
             <g id="entranceGroup" class="map-feature fixed-feature" data-id="entrada">
-              <rect class="feature-shell entrance-shell" x="38" y="535" width="150" height="105" rx="18" />
-              <text class="feature-title" x="113" y="568" text-anchor="middle">PORTARIA</text>
-              <text class="feature-subtitle" x="113" y="593" text-anchor="middle">ENTRADA / SAÍDA</text>
-              <path d="M78 612H148" stroke="#0f172a" stroke-width="5" stroke-linecap="round" />
-              <path d="M88 602L76 612L88 622M138 602L150 612L138 622" fill="none" stroke="#0f172a" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" />
+              <rect class="feature-shell entrance-shell" x="45" y="535" width="72" height="135" rx="18" />
+              <text class="feature-title portaria-vertical-title" x="61" y="592" text-anchor="middle" transform="rotate(-90 61 592)">PORTARIA</text>
+              <text class="feature-subtitle portaria-vertical-subtitle" x="82" y="602" text-anchor="middle" transform="rotate(-90 82 602)">ENTRADA</text>
+              <text class="feature-subtitle portaria-vertical-subtitle" x="101" y="602" text-anchor="middle" transform="rotate(-90 101 602)">SAÍDA</text>
+              <text class="portaria-flow" x="81" y="655" text-anchor="middle">↕</text>
             </g>
 
-            <!-- Estacionamentos e canteiro central -->
-            <g id="publicParking" class="map-feature fixed-feature" data-id="estacionamento-publico">
-              <rect class="parking-shell" x="205" y="198" width="305" height="92" rx="18" />
-              <text class="feature-title" x="357" y="224" text-anchor="middle">ESTACIONAMENTO PÚBLICO</text>
-              <g class="parking-lines">
-                <path d="M225 242H490M225 274H490" />
-                <path d="M245 242V274M280 242V274M315 242V274M350 242V274M385 242V274M420 242V274M455 242V274" />
-              </g>
-              <rect class="median" x="255" y="249" width="205" height="18" rx="9" />
-              <text class="tiny-label" x="357" y="263" text-anchor="middle">CANTEIRO CENTRAL</text>
+            <!-- Via lateral identificada; o ID é preservado para manter vínculos existentes -->
+            <g id="lateralCirculation" class="map-feature fixed-feature" data-id="estacionamento-publico">
+              <rect class="circulation-hit-area" x="120" y="92" width="112" height="466" rx="10" />
             </g>
 
             <g id="staffParking" class="map-feature fixed-feature" data-id="estacionamento-servidores">
-              <rect class="parking-shell" x="305" y="282" width="315" height="42" rx="12" />
-              <text class="feature-title" x="462" y="308" text-anchor="middle">ESTACIONAMENTO DE SERVIDORES</text>
-            </g>
-
-            <!-- Calçadas acompanhando os principais blocos -->
-            <g class="walkways" aria-hidden="true">
-              <rect x="205" y="94" width="430" height="18" rx="8" />
-              <rect x="205" y="292" width="430" height="18" rx="8" />
-              <rect x="205" y="396" width="430" height="18" rx="8" />
-              <rect x="205" y="496" width="430" height="18" rx="8" />
-              <rect x="205" y="605" width="705" height="18" rx="8" />
-              <rect x="605" y="105" width="18" height="500" rx="8" />
+              <rect class="parking-shell" x="560" y="265" width="280" height="38" rx="10" />
+              <text class="feature-title staff-parking-title" x="700" y="290" text-anchor="middle">ESTACIONAMENTO DE SERVIDORES</text>
             </g>
 
             <!-- Estruturas externas superiores e laterais -->
             <g id="oldStorage" class="map-feature fixed-feature" data-id="deposito-antigo">
-              <rect class="feature-shell neutral-shell" x="865" y="82" width="285" height="118" rx="18" />
-              <text class="feature-title" x="1008" y="112" text-anchor="middle">DEPÓSITO ANTIGO</text>
-              <text class="feature-subtitle" x="890" y="144">• Depósito</text>
-              <text class="feature-subtitle" x="890" y="174">• Copa dos agentes de limpeza</text>
+              <rect class="feature-shell neutral-shell" x="960" y="68" width="230" height="75" rx="12" fill="#4a2f06" />
+              <text class="feature-title storage-title" x="1075" y="91" text-anchor="middle">DEPÓSITO ANTIGO</text>
+              <text class="feature-subtitle storage-subtitle" x="977" y="113">• Depósito</text>
+              <text class="feature-subtitle storage-subtitle" x="977" y="134">• Copa dos agentes de limpeza</text>
             </g>
 
             <g id="safs" class="map-feature fixed-feature" data-id="safs">
-              <rect class="feature-shell green-shell" x="1210" y="82" width="210" height="112" rx="18" />
-              <text class="feature-title" x="1315" y="117" text-anchor="middle">SISTEMA</text>
-              <text class="feature-title" x="1315" y="142" text-anchor="middle">AGROFLORESTAL</text>
-              <text class="feature-subtitle" x="1315" y="168" text-anchor="middle">(SAFs)</text>
+              <rect class="feature-shell green-shell" x="1260" y="68" width="135" height="74" rx="12" />
+              <text class="safs-title" x="1327.5" y="88" text-anchor="middle">SISTEMA</text>
+              <text class="safs-title" x="1327.5" y="106" text-anchor="middle">AGROFLORESTAL</text>
+              <text class="safs-subtitle" x="1327.5" y="128" text-anchor="middle">(SAFs)</text>
             </g>
 
             <g id="nursery" class="map-feature fixed-feature" data-id="viveiro">
-              <rect class="feature-shell green-shell" x="1280" y="214" width="140" height="72" rx="18" />
-              <text class="feature-title" x="1350" y="258" text-anchor="middle">VIVEIRO</text>
+              <rect class="feature-shell green-shell" x="1366" y="190" width="86" height="54" rx="12" />
+              <text class="nursery-title" x="1409" y="223" text-anchor="middle">VIVEIRO</text>
+            </g>
+
+            <!-- Faixa arborizada confirmada na marcação verde da revisão -->
+            <g id="jamboArea" aria-label="Pés de jambo">
+              <rect class="jambo-area" x="605" y="420" width="190" height="48" rx="8" />
+              <path class="jambo-leaf-mark" d="M620 442c11-13 24-13 35 0c-11 13-24 13-35 0Zm60 0c11-13 24-13 35 0c-11 13-24 13-35 0Zm60 0c11-13 24-13 35 0c-11 13-24 13-35 0Z" />
+              <text class="jambo-label" x="700" y="462" text-anchor="middle">PÉS DE JAMBO</text>
             </g>
 
             <!-- Campo de futebol na parte inferior da planta -->
             <g id="footballField" class="map-feature fixed-feature" data-id="campo-futebol">
-              <rect class="field-shell" x="185" y="660" width="770" height="195" rx="18" />
-              <rect class="field-line" x="210" y="681" width="720" height="153" rx="4" />
-              <path class="field-line" d="M570 681V834M210 758H930" />
-              <circle class="field-line" cx="570" cy="758" r="30" />
-              <text class="field-title" x="570" y="770" text-anchor="middle">CAMPO DE FUTEBOL</text>
+              <rect class="field-shell" x="240" y="685" width="650" height="190" rx="12" />
+              <rect class="field-line" x="265" y="705" width="600" height="150" rx="3" />
+              <path class="field-line" d="M565 705V855M265 780H865" />
+              <circle class="field-line" cx="565" cy="780" r="30" />
+              <text class="field-title" x="565" y="792" text-anchor="middle">CAMPO DE FUTEBOL</text>
             </g>
 
             <!-- Estruturas desenhadas via JavaScript -->
@@ -195,6 +236,10 @@
         </div>
         <button class="details-close" type="button" aria-label="Fechar detalhes">×</button>
       </div>
+      <div class="details-audit-actions" aria-label="Ações de auditoria ambiental" hidden>
+        <button class="primary-action audit-action" type="button" hidden>Iniciar auditoria</button>
+        <button class="secondary-action audit-history-action" type="button" hidden>Histórico de auditorias</button>
+      </div>
       <p class="details-description"></p>
       <dl class="details-list"></dl>
       <div class="details-actions">
@@ -204,6 +249,55 @@
     </article>
   </template>
 
+  <div id="authModal" class="auth-modal" hidden>
+    <div class="audit-backdrop" data-auth-close></div>
+    <section class="auth-sheet" role="dialog" aria-modal="true" aria-labelledby="authTitle">
+      <header class="audit-header">
+        <div><span class="audit-eyebrow">Sincronização segura</span><h2 id="authTitle">Acesso do auditor</h2></div>
+        <button class="audit-close" type="button" data-auth-close aria-label="Fechar acesso">×</button>
+      </header>
+      <div class="auth-content">
+        <p id="authStatus" class="auth-status" aria-live="polite">Verificando configuração…</p>
+        <form id="authForm" class="auth-form">
+          <label><span>E-mail</span><input name="email" type="email" autocomplete="username" required /></label>
+          <label><span>Senha</span><input name="password" type="password" autocomplete="current-password" required /></label>
+          <button class="audit-primary" type="submit">Entrar e sincronizar</button>
+        </form>
+        <button id="signOutBtn" class="audit-secondary" type="button" hidden>Sair desta conta</button>
+        <button id="syncNowBtn" class="audit-secondary" type="button" hidden>Sincronizar agora</button>
+        <p class="audit-note">Sem acesso, os registros continuam salvos localmente neste navegador. A sincronização exige usuário autorizado no Supabase.</p>
+      </div>
+    </section>
+  </div>
+
+  <div id="auditModal" class="audit-modal" hidden>
+    <div class="audit-backdrop" data-audit-close></div>
+    <section class="audit-sheet" role="dialog" aria-modal="true" aria-labelledby="auditTitle">
+      <header class="audit-header">
+        <div>
+          <span id="auditEnvironment" class="audit-eyebrow"></span>
+          <h2 id="auditTitle">Auditoria ambiental</h2>
+        </div>
+        <button class="audit-close" type="button" data-audit-close aria-label="Fechar auditoria">×</button>
+      </header>
+      <div id="auditSaveState" class="audit-save-state" aria-live="polite">Pronto para iniciar</div>
+      <div id="auditContent" class="audit-content"></div>
+    </section>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3/dist/umd/supabase.min.js" crossorigin="anonymous"></script>
+  <script src="supabase-config.js"></script>
+  <script src="campus-data.js"></script>
+  <script src="audit-data.js"></script>
+  <script src="audit-storage.js"></script>
+  <script src="audit-sync-core.js"></script>
+  <script src="audit-remote.js"></script>
   <script src="app.js"></script>
+  <script src="audit-app.js"></script>
+  <script>
+    if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+      navigator.serviceWorker.register('./sw.js').catch(error => console.warn('[ServiceWorker]', error));
+    }
+  </script>
 </body>
 </html>

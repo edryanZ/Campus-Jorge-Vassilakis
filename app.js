@@ -1,164 +1,15 @@
 'use strict';
 
-const COLORS = {
-  daca: '#5170FF',
-  dacl: '#FD0EB3',
-  daced: '#CB6CE6',
-  dacsa: '#7ED957',
-  biblioteca: '#1E146D',
-  banheiros: '#5CE1E6',
-  auditorios: '#A40000',
-  salas: '#FFDE59',
-  administrativo: '#4C89C7',
-  apoio: '#7C8DA5',
-  laboratorio: '#70C87C',
-  alimentacao: '#F4A83C',
-  psicologia: '#A267CF',
-  deposito: '#6F5438',
-  externo: '#6A8E5A'
-};
-
-const CATEGORY_LABELS = {
-  salas: 'Salas de aula',
-  auditorios: 'Auditórios',
-  administrativo: 'Setores administrativos',
-  departamentos: 'Departamentos acadêmicos',
-  banheiros: 'Banheiros e apoio',
-  laboratorio: 'Laboratórios',
-  alimentacao: 'Alimentação e convivência',
-  psicologia: 'Psicologia',
-  deposito: 'Depósitos e limpeza',
-  biblioteca: 'Biblioteca',
-  externo: 'Estruturas externas'
-};
-
-const LEGEND_ITEMS = [
-  ['DACA', COLORS.daca],
-  ['DACL', COLORS.dacl],
-  ['DACED', COLORS.daced],
-  ['DACSA', COLORS.dacsa],
-  ['Biblioteca Setorial', COLORS.biblioteca],
-  ['Banheiros', COLORS.banheiros],
-  ['Auditórios', COLORS.auditorios],
-  ['Salas de Aula', COLORS.salas],
-  ['Setores Administrativos', 'linear-gradient(90deg,#84A9FF,#1F5F8F)']
-];
-
-// Coordenadas esquemáticas baseadas na planta enviada pelo usuário.
-const blocks = [
-  {
-    id: 'bloco-a', label: 'BLOCO A', x: 220, y: 120, w: 300, h: 72,
-    rooms: [
-      room('sala-1', '1', 'Mini Auditório', 'auditorios'),
-      room('sala-2', '2', 'Sala de Aula', 'salas'),
-      room('sala-3', '3', 'Sala de Aula', 'salas'),
-      room('sala-4', '4', 'Depósito', 'deposito')
-    ]
-  },
-  {
-    id: 'bloco-b', label: 'BLOCO B', x: 535, y: 120, w: 300, h: 140, columns: 4,
-    rooms: [
-      room('sala-5', '5', 'DACED', 'departamentos', { color: COLORS.daced, fullName: 'Departamento Acadêmico de Ciências da Educação' }),
-      room('sala-6', '6', 'DACL', 'departamentos', { color: COLORS.dacl, fullName: 'Departamento Acadêmico de Ciências da Linguagem' }),
-      room('sala-7', '7', 'Sala dos Professores', 'administrativo'),
-      room('sala-8', '8', 'DACA', 'departamentos', { color: COLORS.daca, fullName: 'Departamento Acadêmico de Ciências da Administração' }),
-      room('sala-9', '9', 'Sala de Amamentação', 'administrativo'),
-      room('sala-10', '10', 'DACSA', 'departamentos', { color: COLORS.dacsa, fullName: 'Departamento Acadêmico de Ciências Sociais e Ambientais' }),
-      room('sala-11', '11', 'DACSA', 'departamentos', { color: COLORS.dacsa, fullName: 'Departamento Acadêmico de Ciências Sociais e Ambientais' })
-    ],
-    amenities: ['WC Masculino', 'WC Feminino', 'Bebedouro']
-  },
-  {
-    id: 'bloco-c', label: 'BLOCO C', x: 220, y: 325, w: 330, h: 70,
-    rooms: [
-      room('sala-12', '12', 'Sala de Aula', 'salas'),
-      room('sala-13', '13', 'Sala de Aula', 'salas'),
-      room('sala-14', '14', 'Sala de Aula', 'salas'),
-      room('sala-15', '15', 'Sala de Aula', 'salas'),
-      room('sala-16', '16', 'Sala de Aula', 'salas'),
-      room('sala-17', '17', 'Depósito', 'deposito')
-    ]
-  },
-  {
-    id: 'bloco-d', label: 'BLOCO D', x: 220, y: 425, w: 330, h: 70,
-    rooms: [
-      room('sala-18', '18', 'Sala de Aula', 'salas'),
-      room('sala-19', '19', 'Sala de Aula', 'salas'),
-      room('sala-20', '20', 'Sala de Aula', 'salas'),
-      room('sala-21', '21', 'Sala de Aula', 'salas'),
-      room('sala-22', '22', 'Sala de Aula', 'salas')
-    ]
-  },
-  {
-    id: 'bloco-e', label: 'BLOCO E', x: 565, y: 325, w: 78, h: 170,
-    amenities: ['WC Masculino', 'WC Feminino', 'Bebedouro']
-  },
-  {
-    id: 'bloco-f', label: 'BLOCO F', x: 220, y: 520, w: 300, h: 78,
-    rooms: [
-      room('sala-27', '27', 'Laboratório de Biologia', 'laboratorio'),
-      room('sala-28', '28', 'Laboratório de Informática', 'laboratorio')
-    ]
-  },
-  {
-    id: 'bloco-g', label: 'BLOCO G', x: 540, y: 520, w: 365, h: 78,
-    rooms: [
-      room('sala-30', '30', 'Sala não identificada', 'administrativo'),
-      room('sala-31', '31', 'Equipe de Limpeza', 'deposito'),
-      room('sala-32', '32', 'Equipe de Limpeza', 'deposito'),
-      room('sala-33', '33', 'Cantina', 'alimentacao'),
-      room('sala-34', '34', 'Atlética Kopakao e CAGEAM', 'administrativo')
-    ],
-    amenities: ['WC Masculino', 'WC Feminino']
-  },
-  {
-    id: 'bloco-h', label: 'BLOCO H', x: 700, y: 335, w: 175, h: 72,
-    rooms: [room('sala-35', '35', 'Auditório Grande', 'auditorios')]
-  },
-  {
-    id: 'bloco-i', label: 'BLOCO I', x: 700, y: 430, w: 175, h: 72,
-    rooms: [
-      room('sala-36', '36', 'Psicologia', 'psicologia'),
-      room('sala-37', '37', 'Depósito', 'deposito')
-    ]
-  }
-];
-
-const floorRooms = {
-  inferior: [
-    room('k-biblioteca-setorial', '', 'Biblioteca Setorial', 'biblioteca', { block: 'Bloco K', floor: 'Pavimento inferior' }),
-    room('k-auditorio-biblioteca', '', 'Auditório da Biblioteca', 'auditorios', { block: 'Bloco K', floor: 'Pavimento inferior' }),
-    room('k-copa-inferior', '', 'Copa', 'alimentacao', { block: 'Bloco K', floor: 'Pavimento inferior' }),
-    room('k-wc-m-inferior', '', 'WC Masculino', 'banheiros', { block: 'Bloco K', floor: 'Pavimento inferior' }),
-    room('k-wc-f-inferior', '', 'WC Feminino', 'banheiros', { block: 'Bloco K', floor: 'Pavimento inferior' }),
-    room('k-wc-pcd', '', 'WC PCD', 'banheiros', { block: 'Bloco K', floor: 'Pavimento inferior', accessibility: 'Acessível para pessoa com deficiência' })
-  ],
-  superior: [
-    room('k-direcao', '', 'Direção do Campus', 'administrativo', { block: 'Bloco K', floor: 'Pavimento superior' }),
-    room('k-secretaria-direcao', '', 'Secretaria da Direção', 'administrativo', { block: 'Bloco K', floor: 'Pavimento superior' }),
-    room('k-cadm', '', 'CADM', 'administrativo', { block: 'Bloco K', floor: 'Pavimento superior' }),
-    room('k-serca', '', 'SERCA', 'administrativo', { block: 'Bloco K', floor: 'Pavimento superior' }),
-    room('k-coplan', '', 'COPLAN', 'administrativo', { block: 'Bloco K', floor: 'Pavimento superior' }),
-    room('k-cpav', '', 'CPAV', 'administrativo', { block: 'Bloco K', floor: 'Pavimento superior' }),
-    room('k-ndi', '', 'NDI', 'administrativo', { block: 'Bloco K', floor: 'Pavimento superior' }),
-    room('k-biblioteca-adm', '', 'Biblioteca – setores administrativos', 'biblioteca', { block: 'Bloco K', floor: 'Pavimento superior' }),
-    room('k-outros-orgaos', '', 'Demais órgãos administrativos', 'administrativo', { block: 'Bloco K', floor: 'Pavimento superior' }),
-    room('k-copa-superior', '', 'Copa', 'alimentacao', { block: 'Bloco K', floor: 'Pavimento superior' }),
-    room('k-salao-festas', '', 'Salão de Festas', 'administrativo', { block: 'Bloco K', floor: 'Pavimento superior' }),
-    room('k-wc-m-superior', '', 'WC Masculino', 'banheiros', { block: 'Bloco K', floor: 'Pavimento superior' }),
-    room('k-wc-f-superior', '', 'WC Feminino', 'banheiros', { block: 'Bloco K', floor: 'Pavimento superior' })
-  ]
-};
-
-const fixedLocations = [
-  fixed('entrada', 'Portaria / Entrada e saída', 'externo', 'Entrada principal do campus.'),
-  fixed('estacionamento-publico', 'Estacionamento público', 'externo', 'Área de estacionamento destinada ao público.'),
-  fixed('estacionamento-servidores', 'Estacionamento de servidores', 'externo', 'Área reservada aos servidores.'),
-  fixed('deposito-antigo', 'Depósito Antigo', 'deposito', 'Estrutura independente com depósito e copa dos agentes de limpeza.'),
-  fixed('safs', 'Sistema Agroflorestal (SAFs)', 'externo', 'Área utilizada em atividades de Gestão Ambiental.'),
-  fixed('viveiro', 'Viveiro', 'externo', 'Área de produção de mudas e atividades práticas.'),
-  fixed('campo-futebol', 'Campo de Futebol', 'externo', 'Área esportiva localizada ao lado da via lateral interna.')
-];
+const {
+  COLORS,
+  CATEGORY_LABELS,
+  DESCRIPTIONS,
+  LEGEND_ITEMS,
+  blockK,
+  blocks,
+  floorRooms,
+  fixedLocations
+} = CAMPUS_DATA;
 
 let currentFloor = 'inferior';
 let activeCategory = null;
@@ -166,6 +17,9 @@ let selectedId = null;
 let searchTerm = '';
 let transform = { x: 0, y: 0, scale: 1 };
 let dragState = null;
+let suppressMapClick = false;
+
+const PAN_THRESHOLD_PX = 6;
 
 const svgNS = 'http://www.w3.org/2000/svg';
 const buildingsLayer = document.getElementById('buildingsLayer');
@@ -178,14 +32,6 @@ const detailsPanel = document.getElementById('detailsPanel');
 const detailsTemplate = document.getElementById('detailsTemplate');
 const searchInput = document.getElementById('searchInput');
 const resultCount = document.getElementById('resultCount');
-
-function room(id, number, name, category, extra = {}) {
-  return { id, number, name, category, ...extra };
-}
-
-function fixed(id, name, category, description) {
-  return { id, name, category, description, block: 'Estrutura externa' };
-}
 
 function getColor(item) {
   if (item.color) return item.color;
@@ -220,7 +66,7 @@ function renderBlocks() {
 function renderBlock(block) {
   const group = createSvg('g', {
     id: block.id,
-    class: 'block-group',
+    class: `block-group${block.compactSequence ? ' compact-sequence' : ''}`,
     'data-block': block.label
   });
 
@@ -233,35 +79,64 @@ function renderBlock(block) {
     rx: 16
   }));
 
-  const labelWidth = Math.max(112, block.label.length * 10 + 30);
-  group.appendChild(createSvg('rect', {
-    class: 'block-label-bg',
-    x: block.x + 12,
-    y: block.y - 27,
-    width: labelWidth,
-    height: 28,
-    rx: 8
-  }));
-  group.appendChild(createSvg('text', {
-    class: 'block-label-text',
-    x: block.x + 12 + labelWidth / 2,
-    y: block.y - 8,
-    'text-anchor': 'middle'
-  }, block.label));
+  if (!block.hideLabel) {
+    registerLocation({ id: block.id, name: block.label, block: block.label, category: 'administrativo', kind: 'block' });
+    const labelWidth = Math.max(112, block.label.length * 10 + 30);
+    const blockLabelX = block.labelX ?? block.x + 12;
+    const blockLabelY = block.labelY ?? (block.labelBelow ? block.y + block.h + 8 : block.y - 27);
+    const blockLabelTextY = block.labelTextY ?? blockLabelY + 19;
+    const labelGroup = createSvg('g', {
+      class: 'map-feature block-label-feature',
+      'data-id': block.id,
+      'data-category': 'administrativo',
+      tabindex: '0',
+      role: 'button',
+      'aria-label': `Abrir ambientes do ${block.label}`
+    });
+    labelGroup.appendChild(createSvg('rect', {
+      class: 'block-label-bg',
+      x: blockLabelX,
+      y: blockLabelY,
+      width: labelWidth,
+      height: 28,
+      rx: 8
+    }));
+    labelGroup.appendChild(createSvg('text', {
+      class: 'block-label-text',
+      x: blockLabelX + labelWidth / 2,
+      y: blockLabelTextY,
+      'text-anchor': 'middle'
+    }, block.label));
+    group.appendChild(labelGroup);
+  }
 
-  const pad = 10;
-  const amenitySpace = block.amenities?.length ? 62 : 0;
+  const pad = block.contentPad ?? (block.compactSequence ? 4 : 10);
+  const attachedAmenities = (block.amenities || []).filter(item => !item.detached);
+  const sequenceItems = block.horizontalSequence
+    ? (block.amenitiesFirst
+      ? [...attachedAmenities, ...(block.rooms || [])]
+      : [...(block.rooms || []), ...attachedAmenities])
+    : null;
+  const amenitySpace = !sequenceItems && attachedAmenities.length ? 62 : 0;
   const roomX = block.x + pad + amenitySpace;
   const roomY = block.y + pad;
   const roomW = block.w - pad * 2 - amenitySpace;
   const roomH = block.h - pad * 2;
 
-  if (block.amenities?.length) {
-    const amenityGroup = renderAmenities(block, block.x + pad, roomY, amenitySpace - 8, roomH);
+  if (!sequenceItems && attachedAmenities.length) {
+    const amenityGroup = renderAmenities(block, attachedAmenities, block.x + pad, roomY, amenitySpace - 8, roomH);
     group.appendChild(amenityGroup);
   }
 
-  if (block.rooms?.length) {
+  if (sequenceItems) {
+    const totalWeight = sequenceItems.reduce((sum, item) => sum + (item.layoutWeight || 1), 0);
+    let currentX = roomX;
+    sequenceItems.forEach(item => {
+      const cellW = roomW * (item.layoutWeight || 1) / totalWeight;
+      group.appendChild(renderRoom(item, block.label, currentX, roomY, cellW, roomH));
+      currentX += cellW;
+    });
+  } else if (block.rooms?.length) {
     const columns = block.columns || block.rooms.length;
     const rows = Math.ceil(block.rooms.length / columns);
     const cellW = roomW / columns;
@@ -276,15 +151,18 @@ function renderBlock(block) {
     });
   }
 
+  (block.amenities || []).filter(item => item.detached).forEach(item => {
+    group.appendChild(renderDetachedAmenity(item, block.label));
+  });
+
   buildingsLayer.appendChild(group);
 }
 
-function renderAmenities(block, x, y, w, h) {
+function renderAmenities(block, items, x, y, w, h) {
   const group = createSvg('g');
-  const items = block.amenities || [];
   const cellH = h / items.length;
-  items.forEach((name, index) => {
-    const item = room(`${block.id}-amenity-${index}`, '', name, 'banheiros', { block: block.label });
+  items.forEach((item, index) => {
+    const name = item.displayName || item.name;
     const g = createSvg('g', {
       class: 'map-feature room-feature',
       'data-id': item.id,
@@ -314,6 +192,39 @@ function renderAmenities(block, x, y, w, h) {
     registerLocation(item);
     group.appendChild(g);
   });
+  return group;
+}
+
+function renderDetachedAmenity(item, blockLabel) {
+  const { x, y, w, h } = item;
+  item.anchor = { x: x + w / 2, y: y + h / 2 };
+  registerLocation(item);
+
+  const group = createSvg('g', {
+    class: 'map-feature room-feature detached-amenity',
+    'data-id': item.id,
+    'data-category': item.category,
+    tabindex: '0',
+    role: 'button',
+    'aria-label': `${item.name}, ao lado do ${blockLabel}`
+  });
+  group.appendChild(createSvg('circle', {
+    class: 'room-shape detached-amenity-shape',
+    cx: x + w / 2,
+    cy: y + h / 2,
+    r: Math.min(w, h) / 2,
+    fill: COLORS.banheiros
+  }));
+  group.appendChild(createSvg('path', {
+    class: 'water-drop-icon',
+    d: `M${x + w / 2} ${y + 9}C${x + 11} ${y + 24},${x + 12} ${y + 31},${x + w / 2} ${y + 34}C${x + w - 12} ${y + 31},${x + w - 11} ${y + 24},${x + w / 2} ${y + 9}Z`
+  }));
+  group.appendChild(createSvg('text', {
+    class: 'detached-amenity-label',
+    x: item.labelSide === 'left' ? x - 4 : x + w / 2,
+    y: item.labelSide === 'left' ? y + h / 2 + 4 : y + h + 16,
+    'text-anchor': item.labelSide === 'left' ? 'end' : 'middle'
+  }, item.name));
   return group;
 }
 
@@ -353,7 +264,7 @@ function renderRoom(item, blockLabel, x, y, w, h) {
   }
 
   const availableWidth = Math.max(45, w - 12);
-  const label = item.fullName && w > 120 ? item.name : item.name;
+  const label = item.displayName || item.name;
   const lines = wrapText(label, Math.max(7, Math.floor(availableWidth / 7)));
   const startY = y + (item.number ? Math.min(47, h * .56) : h / 2 - ((lines.length - 1) * 7));
   lines.slice(0, 3).forEach((line, index) => {
@@ -369,20 +280,26 @@ function renderRoom(item, blockLabel, x, y, w, h) {
 }
 
 function renderBlockK() {
-  const x = 930;
-  const y = 315;
-  const w = 465;
-  const h = 285;
-  const group = createSvg('g', { id: 'bloco-k', 'data-block': 'BLOCO K' });
+  const { x, y, w, h } = blockK;
+  const titleStrip = { x: x + w, y, w: 42, h };
+  const group = createSvg('g', { id: blockK.id, 'data-block': blockK.label });
+  registerLocation({ id: blockK.id, name: blockK.buildingLabel, block: blockK.label, category: 'administrativo', kind: 'block', auditPending: true });
   group.appendChild(createSvg('rect', { class: 'block-outline block-k-outline', x, y, width: w, height: h, rx: 22 }));
-  group.appendChild(createSvg('rect', { x, y, width: w, height: 48, rx: 22, fill: '#123b63' }));
-  group.appendChild(createSvg('rect', { x, y: y + 24, width: w, height: 24, fill: '#123b63' }));
-  group.appendChild(createSvg('text', { class: 'floor-title', x: x + w / 2, y: y + 31, 'text-anchor': 'middle' }, 'BLOCO K – PRÉDIO AZUL'));
+  const header = createSvg('g', { class: 'map-feature block-label-feature', 'data-id': blockK.id, 'data-category': 'administrativo', tabindex: '0', role: 'button', 'aria-label': `Abrir informações do ${blockK.buildingLabel}` });
+  header.appendChild(createSvg('rect', { class: 'block-k-side-label-bg', x: titleStrip.x, y: titleStrip.y, width: titleStrip.w, height: titleStrip.h, rx: 18 }));
+  header.appendChild(createSvg('text', {
+    class: 'floor-title block-k-side-label',
+    x: titleStrip.x + titleStrip.w / 2,
+    y: titleStrip.y + titleStrip.h / 2,
+    'text-anchor': 'middle',
+    transform: `rotate(90 ${titleStrip.x + titleStrip.w / 2} ${titleStrip.y + titleStrip.h / 2})`
+  }, blockK.buildingLabel));
+  group.appendChild(header);
 
   const rooms = floorRooms[currentFloor];
   const contentY = y + 60;
   const innerPad = 12;
-  const columns = currentFloor === 'inferior' ? 2 : 3;
+  const columns = blockK.floorColumns[currentFloor];
   const rows = Math.ceil(rooms.length / columns);
   const cellW = (w - innerPad * 2) / columns;
   const cellH = (h - 74) / rows;
@@ -478,9 +395,22 @@ function renderDetails(item) {
   fragment.querySelector('.route-action').addEventListener('click', () => showRouteTo(item));
   fragment.querySelector('.focus-action').addEventListener('click', () => focusLocation(item.id));
 
+  const auditAction = fragment.querySelector('.audit-action');
+  const historyAction = fragment.querySelector('.audit-history-action');
+  if (window.AUDIT_DATA?.getEnvironmentByMapId(item.id)) {
+    fragment.querySelector('.details-audit-actions').hidden = false;
+    auditAction.hidden = false;
+    historyAction.hidden = false;
+    auditAction.addEventListener('click', () => window.dispatchEvent(new CustomEvent('audit:start', { detail: { mapId: item.id } })));
+    historyAction.addEventListener('click', () => window.dispatchEvent(new CustomEvent('audit:history', { detail: { mapId: item.id } })));
+  }
+
   detailsPanel.innerHTML = '';
   detailsPanel.appendChild(fragment);
+  detailsPanel.hidden = false;
+  detailsPanel.setAttribute('aria-hidden', 'false');
   detailsPanel.classList.add('is-open');
+  window.dispatchEvent(new CustomEvent('campus:location-selected', { detail: { item } }));
 }
 
 function addDetail(list, label, value) {
@@ -494,13 +424,7 @@ function addDetail(list, label, value) {
 }
 
 function getDefaultDescription(item) {
-  if (item.category === 'salas') return 'Espaço destinado às atividades de ensino do campus.';
-  if (item.category === 'departamentos') return 'Setor acadêmico responsável por atividades de gestão, ensino e apoio ao curso.';
-  if (item.category === 'banheiros') return 'Estrutura de apoio localizada junto ao bloco.';
-  if (item.category === 'laboratorio') return 'Espaço destinado às atividades práticas, acadêmicas e de pesquisa.';
-  if (item.category === 'auditorios') return 'Espaço destinado a eventos, reuniões, palestras e apresentações.';
-  if (item.category === 'biblioteca') return 'Setor de consulta, estudo, atendimento e apoio acadêmico.';
-  return 'Local pertencente à estrutura do Campus Jorge Vassilakis.';
+  return DESCRIPTIONS[item.category] || DESCRIPTIONS.padrao;
 }
 
 function clearSelection() {
@@ -508,6 +432,7 @@ function clearSelection() {
   document.querySelectorAll('.map-feature').forEach(el => el.classList.remove('is-selected'));
   routeLayer.innerHTML = '';
   detailsPanel.classList.remove('is-open');
+  detailsPanel.setAttribute('aria-hidden', 'false');
   detailsPanel.innerHTML = `
     <div class="details-empty">
       <div class="empty-icon">⌖</div>
@@ -633,7 +558,7 @@ function categoryColor(category) {
 function getAllLocations() {
   const dynamic = blocks.flatMap(block => [
     ...(block.rooms || []).map(item => ({ ...item, block: item.block || block.label })),
-    ...(block.amenities || []).map((name, index) => room(`${block.id}-amenity-${index}`, '', name, 'banheiros', { block: block.label }))
+    ...(block.amenities || [])
   ]);
   return [...dynamic, ...floorRooms[currentFloor], ...fixedLocations];
 }
@@ -742,22 +667,49 @@ function setupInteractions() {
 
   mapViewport.addEventListener('pointerdown', event => {
     if (event.button !== 0) return;
-    dragState = { startX: event.clientX, startY: event.clientY, x: transform.x, y: transform.y };
-    mapViewport.setPointerCapture(event.pointerId);
+    if (event.target.closest?.('.map-feature')) return;
+    dragState = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      x: transform.x,
+      y: transform.y,
+      isPanning: false
+    };
+    suppressMapClick = false;
   });
   mapViewport.addEventListener('pointermove', event => {
-    if (!dragState) return;
+    if (!dragState || event.pointerId !== dragState.pointerId) return;
+    const distance = Math.hypot(event.clientX - dragState.startX, event.clientY - dragState.startY);
+    if (!dragState.isPanning) {
+      if (distance < PAN_THRESHOLD_PX) return;
+      dragState.isPanning = true;
+      suppressMapClick = true;
+      mapViewport.setPointerCapture(event.pointerId);
+    }
     const rect = mapViewport.getBoundingClientRect();
     transform.x = dragState.x + ((event.clientX - dragState.startX) / rect.width) * 1500;
     transform.y = dragState.y + ((event.clientY - dragState.startY) / rect.height) * 920;
     applyTransform();
   });
   mapViewport.addEventListener('pointerup', event => {
+    if (!dragState || event.pointerId !== dragState.pointerId) return;
+    const completedPan = dragState.isPanning;
     dragState = null;
     if (mapViewport.hasPointerCapture(event.pointerId)) mapViewport.releasePointerCapture(event.pointerId);
+    if (completedPan) setTimeout(() => { suppressMapClick = false; }, 0);
   });
-  mapViewport.addEventListener('pointercancel', () => { dragState = null; });
+  mapViewport.addEventListener('pointercancel', event => {
+    if (dragState?.pointerId === event.pointerId) dragState = null;
+    if (mapViewport.hasPointerCapture(event.pointerId)) mapViewport.releasePointerCapture(event.pointerId);
+    suppressMapClick = false;
+  });
   mapSvg.addEventListener('click', event => {
+    if (suppressMapClick) {
+      suppressMapClick = false;
+      event.preventDefault();
+      return;
+    }
     if (event.target === mapSvg || event.target.classList.contains('site-background') || event.target.classList.contains('boundary-green')) {
       clearSelection();
     }

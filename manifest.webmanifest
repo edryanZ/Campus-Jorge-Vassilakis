@@ -1,0 +1,11 @@
+{
+  "name": "Auditoria Ambiental — Campus Jorge Vassilakis",
+  "short_name": "Auditoria UNIR",
+  "description": "Mapa interativo e coleta local-first de auditorias ambientais do Campus Jorge Vassilakis.",
+  "lang": "pt-BR",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#eaf0f6",
+  "theme_color": "#071a33"
+}
