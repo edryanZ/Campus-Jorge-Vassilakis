@@ -547,3 +547,23 @@ body.audit-open { overflow: hidden; }
   .map-panel { box-shadow: none; border: 0; height: 100vh; }
   .map-viewport { height: 100vh; }
 }
+
+
+/* v16 — Central de Auditorias */
+.audit-center-sheet { max-width: 780px; width: min(96vw, 780px); }
+.audit-center-controls { display: grid; grid-template-columns: minmax(0, 1fr) minmax(150px, 210px); gap: 8px 14px; padding: 16px 20px; }
+.audit-center-controls label { font-size: 0.85rem; font-weight: 700; color: #334155; }
+.audit-center-controls input, .audit-center-controls select { min-width: 0; width: 100%; border: 1px solid #cbd5e1; border-radius: 10px; padding: 11px; background: #fff; color: #172b44; }
+.audit-center-controls p { grid-column: 1 / -1; margin: 6px 0 0; color: #475569; font-size: 0.9rem; }
+.audit-center-results { overflow-y: auto; max-height: min(55vh, 540px); padding: 8px 20px 22px; }
+.audit-center-card { padding: 14px 0; border-bottom: 1px solid #e2e8f0; display: grid; gap: 8px; }
+.audit-center-card strong { color: #0f2947; overflow-wrap: anywhere; }
+.audit-center-card p { margin: 0; color: #475569; font-size: 0.88rem; }
+.audit-center-card button { justify-self: start; border: 1px solid #9bb1c9; border-radius: 9px; padding: 9px 14px; color: #123b61; background: #f4f8fd; font-weight: 650; cursor: pointer; }
+.audit-center-card button:disabled { opacity: .5; cursor: not-allowed; }
+.audit-center-empty { color: #475569; }
+@media (max-width: 640px) {
+  .audit-center-controls { grid-template-columns: minmax(0, 1fr); padding: 14px; }
+  .audit-center-results { padding: 8px 14px 20px; }
+  .top-actions #auditCenterBtn { display: inline-flex; }
+}
