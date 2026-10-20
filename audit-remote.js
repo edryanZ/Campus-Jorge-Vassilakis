@@ -63,11 +63,25 @@ const AUDIT_REMOTE = (() => {
     const user = await currentUser();
     if (!client || !user || !navigator.onLine) return { skipped: true, audit: proposed };
     const mutationId = proposed.mutationId || newId('MUTATION');
-    const call = await client.rpc('resume_or_create_active_audit', {
+    let call = await client.rpc('resume_or_create_active_audit', {
       p_id: proposed.auditId, p_environment_id: proposed.environmentId,
       p_private_payload: proposed, p_public_payload: AUDIT_SYNC_CORE.publicPayload(proposed),
       p_mutation_id: mutationId, p_device_id: await AUDIT_STORAGE.getDeviceId()
     });
+    // Compatibilidade com o banco v14: a RPC v15 ainda nao foi migrada.
+    // Verifica novamente se ja existe um rascunho antes de criar; o indice
+    // unico remoto e a recuperacao de 23505 impedem rascunhos duplicados.
+    if (call.error && ['PGRST202', '42883'].includes(String(call.error.code))) {
+      const previous = await findRemoteActive(proposed.environmentId);
+      if (previous) return { resumed: true, audit: previous, compatibilityMode: true };
+      call = await client.rpc('sync_audit', {
+        p_id: proposed.auditId, p_environment_id: proposed.environmentId,
+        p_status: proposed.status, p_private_payload: proposed,
+        p_public_payload: AUDIT_SYNC_CORE.publicPayload(proposed),
+        p_completed_at: null, p_is_public: false, p_expected_revision: 0,
+        p_mutation_id: mutationId, p_device_id: await AUDIT_STORAGE.getDeviceId()
+      });
+    }
     if (call.error) {
       if (AUDIT_SYNC_CORE.isActiveUniqueViolation(call.error)) {
         const existing = await findRemoteActive(proposed.environmentId);
