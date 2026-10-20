@@ -488,6 +488,7 @@ const AUDIT_APP = (() => {
   const centerResults = document.getElementById('auditCenterResults');
   const centerSummary = document.getElementById('auditCenterSummary');
   let centerRecords = [];
+  let centerLoadNote = '';
   let centerFocus = null;
 
   function centerStatus(item) {
@@ -507,7 +508,7 @@ const AUDIT_APP = (() => {
       if (filter === 'PENDING' && !['LOCAL_ONLY', 'PENDING', 'ERROR', 'CONFLICT'].includes(item.syncState)) return false;
       return true;
     });
-    centerSummary.textContent = `${rows.length} de ${centerRecords.length} auditoria(s) disponível(is) neste dispositivo`;
+    centerSummary.textContent = `${rows.length} de ${centerRecords.length} auditoria(s) acessível(is). ${centerLoadNote}`;
     centerResults.replaceChildren();
     if (!rows.length) {
       const empty = document.createElement('p');
@@ -523,7 +524,7 @@ const AUDIT_APP = (() => {
       const heading = document.createElement('strong');
       heading.textContent = env ? `${env.blockName} · ${env.roomNumber ? 'Sala ' + env.roomNumber + ' — ' : ''}${env.name}` : item.environmentId;
       const info = document.createElement('p');
-      info.textContent = `${centerStatus(item)} · ${item.syncState === 'SYNCED' ? 'Sincronizada' : item.syncState === 'CONFLICT' ? 'Conflito preservado' : 'Local / pendente'} · ${item.updatedAt ? new Date(item.updatedAt).toLocaleString('pt-BR') : 'Sem data'}`;
+      info.textContent = `${centerStatus(item)} · ${item.syncState === 'SYNCED' ? 'Sincronizada' : item.syncState === 'CONFLICT' ? 'Conflito preservado' : item.remoteOnly ? 'No Supabase' : 'Local / pendente'} · ${item.updatedAt ? new Date(item.updatedAt).toLocaleString('pt-BR') : 'Sem data'}`;
       const action = document.createElement('button');
       action.type = 'button';
       action.textContent = 'Ver histórico';
@@ -533,6 +534,11 @@ const AUDIT_APP = (() => {
         try { await openHistory(env.mapId); }
         catch (error) { console.error('[AuditCenter]', error); centerModal.hidden = false; }
       });
+      if (item.publicOnly) {
+        const note = document.createElement('small');
+        note.textContent = 'Registro público concluído';
+        card.append(note);
+      }
       card.append(heading, info, action);
       centerResults.append(card);
     }
@@ -547,13 +553,36 @@ const AUDIT_APP = (() => {
     try {
       const owner = await AUDIT_REMOTE.ownerKey();
       const all = await AUDIT_STORAGE.listAudits();
-      centerRecords = all.filter(item => {
+      const localRecords = all.filter(item => {
         if (AUDIT_SYNC_CORE.isRecoveryAudit(item)) return false;
         const recordOwner = AUDIT_SYNC_CORE.ownerKey(item);
         return !recordOwner || recordOwner === owner ||
           (recordOwner.startsWith('LOCAL:') && item.ownerId == null);
-      }).sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')));
-      renderCenter();
+      });
+      const merged = new Map(localRecords.map(item => [item.auditId, item]));
+      centerLoadNote = 'Somente registros locais (sem conexão).';
+      if (AUDIT_REMOTE.configured && navigator.onLine) {
+        try {
+          const remote = await AUDIT_REMOTE.listAccessibleAudits();
+          for (const item of remote.items) {
+            const existing = merged.get(item.auditId);
+            // Preserva a versao local com alteracoes pendentes; nao grava no IndexedDB.
+            if (!existing) merged.set(item.auditId, item);
+            else if (existing.syncState === 'SYNCED' && Number(item.serverRevision || 0) > Number(existing.serverRevision || 0))
+              merged.set(item.auditId, item);
+          }
+          centerLoadNote = remote.authenticated
+            ? 'Inclui auditorias autorizadas do Supabase e registros públicos.'
+            : 'Sem login: registros locais e auditorias públicas.';
+          if (remote.limited) centerLoadNote += ' Consulta limitada aos 1.000 registros mais recentes por origem.';
+        } catch (error) {
+          centerLoadNote = 'Consulta remota indisponível; registros locais preservados.';
+          console.warn('[AuditCenter] Falha ao consultar Supabase:', error);
+        }
+      }
+      centerRecords = [...merged.values()].sort((a, b) =>
+        String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')));
+      if (!centerModal.hidden) renderCenter();
     } catch (error) {
       centerSummary.textContent = 'Não foi possível carregar as auditorias locais.';
       console.error('[AuditCenter]', error);
