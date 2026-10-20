@@ -480,6 +480,104 @@ const AUDIT_APP = (() => {
   });
   AUDIT_REMOTE.onAuthStateChange((_event, user) => setAuthState(user));
 
+  // v16: central de consulta, sem regravar auditorias nem iniciar sincronizacao automatica.
+  const centerModal = document.getElementById('auditCenterModal');
+  const centerButton = document.getElementById('auditCenterBtn');
+  const centerSearch = document.getElementById('auditCenterSearch');
+  const centerFilter = document.getElementById('auditCenterFilter');
+  const centerResults = document.getElementById('auditCenterResults');
+  const centerSummary = document.getElementById('auditCenterSummary');
+  let centerRecords = [];
+  let centerFocus = null;
+
+  function centerStatus(item) {
+    return item.status === 'COMPLETED' ? 'Concluída' : item.status === 'IN_PROGRESS' ? 'Em andamento' : 'Rascunho';
+  }
+
+  function renderCenter() {
+    const query = centerSearch.value.trim().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase();
+    const filter = centerFilter.value;
+    const rows = centerRecords.filter(item => {
+      const env = AUDIT_DATA.getEnvironment(item.environmentId);
+      const searchable = [env?.name, env?.blockName, env?.roomNumber, item.environmentId, item.auditId].join(' ')
+        .normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase();
+      if (query && !searchable.includes(query)) return false;
+      if (filter === 'COMPLETED' && item.status !== 'COMPLETED') return false;
+      if (filter === 'ACTIVE' && item.status === 'COMPLETED') return false;
+      if (filter === 'PENDING' && !['LOCAL_ONLY', 'PENDING', 'ERROR', 'CONFLICT'].includes(item.syncState)) return false;
+      return true;
+    });
+    centerSummary.textContent = `${rows.length} de ${centerRecords.length} auditoria(s) disponível(is) neste dispositivo`;
+    centerResults.replaceChildren();
+    if (!rows.length) {
+      const empty = document.createElement('p');
+      empty.className = 'audit-center-empty';
+      empty.textContent = 'Nenhuma auditoria encontrada para estes filtros.';
+      centerResults.append(empty);
+      return;
+    }
+    for (const item of rows) {
+      const env = AUDIT_DATA.getEnvironment(item.environmentId);
+      const card = document.createElement('article');
+      card.className = 'audit-center-card';
+      const heading = document.createElement('strong');
+      heading.textContent = env ? `${env.blockName} · ${env.roomNumber ? 'Sala ' + env.roomNumber + ' — ' : ''}${env.name}` : item.environmentId;
+      const info = document.createElement('p');
+      info.textContent = `${centerStatus(item)} · ${item.syncState === 'SYNCED' ? 'Sincronizada' : item.syncState === 'CONFLICT' ? 'Conflito preservado' : 'Local / pendente'} · ${item.updatedAt ? new Date(item.updatedAt).toLocaleString('pt-BR') : 'Sem data'}`;
+      const action = document.createElement('button');
+      action.type = 'button';
+      action.textContent = 'Ver histórico';
+      action.disabled = !env?.mapId;
+      action.addEventListener('click', async () => {
+        centerModal.hidden = true;
+        try { await openHistory(env.mapId); }
+        catch (error) { console.error('[AuditCenter]', error); centerModal.hidden = false; }
+      });
+      card.append(heading, info, action);
+      centerResults.append(card);
+    }
+  }
+
+  async function openCenter() {
+    centerFocus = document.activeElement;
+    centerModal.hidden = false;
+    document.body.classList.add('audit-open');
+    centerSummary.textContent = 'Carregando registros locais…';
+    centerResults.replaceChildren();
+    try {
+      const owner = await AUDIT_REMOTE.ownerKey();
+      const all = await AUDIT_STORAGE.listAudits();
+      centerRecords = all.filter(item => {
+        if (AUDIT_SYNC_CORE.isRecoveryAudit(item)) return false;
+        const recordOwner = AUDIT_SYNC_CORE.ownerKey(item);
+        return !recordOwner || recordOwner === owner ||
+          (recordOwner.startsWith('LOCAL:') && item.ownerId == null);
+      }).sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')));
+      renderCenter();
+    } catch (error) {
+      centerSummary.textContent = 'Não foi possível carregar as auditorias locais.';
+      console.error('[AuditCenter]', error);
+    }
+    centerSearch.focus();
+  }
+
+  function closeCenter() {
+    centerModal.hidden = true;
+    if (modal.hidden && authModal.hidden) document.body.classList.remove('audit-open');
+    centerFocus?.focus();
+  }
+
+  centerButton.addEventListener('click', openCenter);
+  centerModal.querySelectorAll('[data-center-close]').forEach(button => button.addEventListener('click', closeCenter));
+  centerSearch.addEventListener('input', renderCenter);
+  centerFilter.addEventListener('change', renderCenter);
+  window.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && !centerModal.hidden) {
+      event.preventDefault();
+      closeCenter();
+    }
+  });
+
   window.addEventListener('audit:start', event => openAudit(event.detail.mapId));
   window.addEventListener('audit:history', event => openHistory(event.detail.mapId));
   window.addEventListener('campus:location-selected', event => showBlockEnvironments(event.detail.item));
