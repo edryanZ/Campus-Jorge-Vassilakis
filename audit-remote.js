@@ -292,6 +292,44 @@ const AUDIT_REMOTE = (() => {
     return { count: result.data?.length || 0, conflicts };
   }
 
+  // Consulta somente leitura: RLS do Supabase restringe auditorias privadas
+  // ao usuario autorizado. A view publicada expõe apenas payload sanitizado.
+  async function listAccessibleAudits() {
+    if (!client || !navigator.onLine) return { items: [], offline: !navigator.onLine, authenticated: false };
+    const user = await currentUser();
+    const items = [];
+    if (user) {
+      const owned = await client.from('audits')
+        .select('id,environment_id,status,updated_at,completed_at,server_revision,owner_id,sync_complete')
+        .eq('owner_id', user.id).order('updated_at', { ascending: false }).limit(1000);
+      if (owned.error) throw owned.error;
+      for (const row of owned.data || []) {
+        items.push({
+          auditId: row.id, environmentId: row.environment_id, status: row.status,
+          updatedAt: row.updated_at, completedAt: row.completed_at,
+          serverRevision: row.server_revision, ownerId: row.owner_id,
+          syncState: row.sync_complete ? 'SYNCED' : 'PENDING',
+          source: 'REMOTE', remoteOnly: true
+        });
+      }
+    }
+    const published = await client.from('published_audits')
+      .select('id,environment_id,status,updated_at,completed_at,server_revision')
+      .order('updated_at', { ascending: false }).limit(1000);
+    if (published.error) throw published.error;
+    for (const row of published.data || []) {
+      if (items.some(item => item.auditId === row.id)) continue;
+      items.push({
+        auditId: row.id, environmentId: row.environment_id, status: row.status,
+        updatedAt: row.updated_at, completedAt: row.completed_at,
+        serverRevision: row.server_revision, syncState: 'SYNCED',
+        source: 'PUBLIC', publicOnly: true, remoteOnly: true
+      });
+    }
+    return { items, authenticated: Boolean(user), offline: false,
+      limited: (published.data?.length || 0) === 1000 || (user && items.length >= 1000) };
+  }
+
   async function listPublic(environmentId) {
     if (!client || !navigator.onLine) return [];
     const result = await client.from('published_audits').select('id,environment_id,status,public_payload,completed_at,updated_at,server_revision').eq('environment_id', environmentId).order('completed_at', { ascending: false });
@@ -343,7 +381,7 @@ const AUDIT_REMOTE = (() => {
   return Object.freeze({
     configured, client, currentUser, sessionUser, ownerKey, signIn, signOut, onAuthStateChange,
     findRemoteActive, resumeOrCreateActive, syncAudit, scheduleSync, flushSync, syncPending,
-    pullRemote, listPublic, preserveConflict
+    pullRemote, listPublic, listAccessibleAudits, preserveConflict
   });
 })();
 
