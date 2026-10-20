@@ -505,7 +505,8 @@ body.audit-open { overflow: hidden; }
   .brand { grid-area: brand; }
   .search-box { grid-area: search; width: 100%; }
   .top-actions { grid-area: actions; }
-  .top-actions button:first-child { display: none; }
+  /* Manter o acesso à conta disponível também no celular. */
+  .top-actions #authBtn { display: inline-flex; align-items: center; justify-content: center; }
   .app-shell {
     height: calc(100vh - 132px);
     grid-template-columns: 1fr;
