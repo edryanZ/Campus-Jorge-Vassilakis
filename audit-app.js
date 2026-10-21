@@ -653,6 +653,9 @@ const AUDIT_APP = (() => {
   const adminList = document.getElementById('accountRequestsList');
   const adminStatus = document.getElementById('accountRequestsStatus');
   const refreshAccounts = document.getElementById('refreshAccountRequests');
+  const participationList = document.getElementById('participationRequestsList');
+  const participationStatus = document.getElementById('participationRequestsStatus');
+  const refreshParticipation = document.getElementById('refreshParticipationRequests');
   let currentAccess = null;
   let authGeneration = 0;
 
@@ -713,6 +716,68 @@ const AUDIT_APP = (() => {
     }
   }
 
+  async function loadAuditParticipationRequests() {
+    participationStatus.textContent = 'Consultando solicitações de participação…';
+    participationList.replaceChildren();
+    try {
+      const rows = await AUDIT_REMOTE.listAuditParticipationRequests();
+      participationStatus.textContent = rows.length
+        ? `${rows.length} solicitação(ões) de participação.`
+        : 'Nenhuma solicitação de participação.';
+      for (const item of rows) {
+        const env = AUDIT_DATA.getEnvironment(item.environment_id);
+        const card = document.createElement('article');
+        card.className = 'admin-request-card';
+        const heading = document.createElement('strong');
+        heading.textContent = env
+          ? `${env.blockName} · ${env.roomNumber ? 'Sala ' + env.roomNumber : env.name}`
+          : item.environment_id;
+        const info = document.createElement('p');
+        info.textContent = `${item.requester_name || 'Auditor'} (${item.requester_email || 'sem e-mail'}) · Responsável: ${item.responsible_name || 'Não informado'}`;
+        const state = document.createElement('small');
+        state.textContent = ({ PENDING: 'Aguardando aprovação', APPROVED: 'Participação autorizada',
+          REJECTED: 'Solicitação recusada', REVOKED: 'Autorização revogada' })[item.status] || item.status;
+        const actions = document.createElement('div');
+        actions.className = 'admin-request-actions';
+        if (item.status !== 'APPROVED') {
+          const approve = document.createElement('button');
+          approve.type = 'button';
+          approve.className = 'audit-primary';
+          approve.textContent = 'Autorizar participação';
+          approve.addEventListener('click', () => reviewAuditParticipation(item.audit_id, item.requester_id, true));
+          actions.append(approve);
+        } else {
+          const revoke = document.createElement('button');
+          revoke.type = 'button';
+          revoke.className = 'audit-secondary';
+          revoke.textContent = 'Revogar participação';
+          revoke.addEventListener('click', () => reviewAuditParticipation(item.audit_id, item.requester_id, false));
+          actions.append(revoke);
+        }
+        card.append(heading, info, state, actions);
+        participationList.append(card);
+      }
+    } catch (error) {
+      participationStatus.textContent = 'Falha ao consultar participações: ' + (error.message || error);
+    }
+  }
+
+  async function reviewAuditParticipation(auditId, requesterId, approve) {
+    if (!window.confirm(approve
+      ? 'Autorizar este usuário a editar a auditoria indicada? O responsável original será mantido.'
+      : 'Revogar a permissão de editar esta auditoria?')) return;
+    participationStatus.textContent = 'Registrando decisão…';
+    try {
+      await AUDIT_REMOTE.reviewAuditParticipation(auditId, requesterId, approve);
+      await loadAuditParticipationRequests();
+      participationStatus.textContent = approve
+        ? 'Participação autorizada. A pessoa já pode continuar a auditoria existente.'
+        : 'Permissão de participação revogada.';
+    } catch (error) {
+      participationStatus.textContent = 'Falha ao registrar decisão: ' + (error.message || error);
+    }
+  }
+
   async function setAuthState(user, message = '') {
     const generation = ++authGeneration;
     const authenticated = Boolean(user);
@@ -742,7 +807,10 @@ const AUDIT_APP = (() => {
         authStatus.textContent = message || `Conta autorizada (${access.admin ? 'Administrador' : 'Auditor'})${access.offline ? ' · autorização offline temporária' : ''}.`;
         syncNowButton.hidden = Boolean(access.offline);
         adminPanel.hidden = !access.admin || access.offline;
-        if (access.admin && !access.offline) loadAccessRequests();
+        if (access.admin && !access.offline) {
+          loadAccessRequests();
+          loadAuditParticipationRequests();
+        }
       } else {
         authStatus.className = 'auth-status';
         authStatus.textContent = access?.reviewStatus === 'REJECTED'
@@ -844,6 +912,7 @@ const AUDIT_APP = (() => {
     }
   });
   refreshAccounts.addEventListener('click', loadAccessRequests);
+  refreshParticipation.addEventListener('click', loadAuditParticipationRequests);
   AUDIT_REMOTE.onAuthStateChange((_event, user) => { setAuthState(user).catch(error => console.error('[Auth]', error)); });
 
   // v16: central de consulta, sem regravar auditorias nem iniciar sincronizacao automatica.
