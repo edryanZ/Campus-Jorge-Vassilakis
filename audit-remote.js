@@ -98,7 +98,10 @@ const AUDIT_REMOTE = (() => {
     if (!client) throw new Error('Cadastro indisponível: Supabase não configurado.');
     const { data, error } = await client.auth.signUp({
       email: String(email).trim(), password,
-      options: { data: { display_name: String(displayName).trim().slice(0, 120) } }
+      options: {
+        emailRedirectTo: window.location.origin + window.location.pathname,
+        data: { display_name: String(displayName).trim().slice(0, 120) }
+      }
     });
     if (error) throw error;
     return data;
