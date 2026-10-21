@@ -264,9 +264,26 @@
           <label><span>Senha</span><input name="password" type="password" autocomplete="current-password" required /></label>
           <button class="audit-primary" type="submit">Entrar e sincronizar</button>
         </form>
+        <button id="showSignupBtn" class="audit-secondary" type="button">Solicitar conta de auditor</button>
+        <form id="signupForm" class="auth-form" hidden>
+          <h3>Solicitar acesso</h3>
+          <p class="audit-note">Qualquer pessoa pode consultar resultados publicados sem conta. O cadastro de auditor depende de aprovação.</p>
+          <label><span>Nome completo</span><input name="displayName" type="text" autocomplete="name" maxlength="120" required /></label>
+          <label><span>E-mail</span><input name="email" type="email" autocomplete="email" required /></label>
+          <label><span>Senha (mínimo 8 caracteres)</span><input name="password" type="password" autocomplete="new-password" minlength="8" required /></label>
+          <button class="audit-primary" type="submit">Enviar solicitação</button>
+          <button id="backToLoginBtn" class="audit-secondary" type="button">Já tenho conta · Entrar</button>
+        </form>
         <button id="signOutBtn" class="audit-secondary" type="button" hidden>Sair desta conta</button>
         <button id="syncNowBtn" class="audit-secondary" type="button" hidden>Sincronizar agora</button>
-        <p class="audit-note">Sem acesso, os registros continuam salvos localmente neste navegador. A sincronização exige usuário autorizado no Supabase.</p>
+        <p class="audit-note">A consulta de resultados <strong>publicados</strong> é livre. Para criar ou editar auditorias é necessário ter conta aprovada. Registros antigos deste dispositivo não serão apagados.</p>
+        <section id="adminRequestsPanel" class="admin-requests" hidden>
+          <h3>Gerenciar acessos</h3>
+          <p class="audit-note">Somente o administrador pode aprovar ou recusar contas. É obrigatório confirmar o e-mail antes da aprovação.</p>
+          <button id="refreshAccountRequests" type="button" class="audit-secondary">Atualizar solicitações</button>
+          <p id="accountRequestsStatus" role="status" aria-live="polite"></p>
+          <div id="accountRequestsList" class="admin-requests-list"></div>
+        </section>
       </div>
     </section>
   </div>
