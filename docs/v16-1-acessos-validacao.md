@@ -46,3 +46,11 @@ A migração adicional `supabase/migrations/20261021_v16_1_2_harden_access.sql` 
 A verificação posterior confirmou a presença dessas políticas e a preservação de 1 auditoria, 33 revisões, 1 evidência, 1 perfil e 0 publicações.
 
 **Pendências de validação:** ainda não foi realizado um teste real ponta a ponta com e-mail novo confirmado e aprovação no navegador. O relatório de segurança do Supabase também recomenda ativar proteção contra senhas vazadas em Authentication; essa opção não foi alterada automaticamente.
+
+## Complemento de isolamento v16.1.5
+
+- A sincronização verifica o `ownerId` do registro antes de criar cópia ou enviar dados ao Supabase; registros vinculados a outra conta são ignorados e preservados.
+- Registros locais vinculados a outro dispositivo também são ignorados; rascunhos antigos sem `ownerId` continuam elegíveis para recuperação no dispositivo original.
+- O login permanece concluído mesmo se a sincronização posterior falhar.
+- Teste de código com conta autorizada e auditoria pertencente a outro usuário: `OTHER_OWNER`, 0 chamadas RPC, 0 gravações locais.
+- A implantação mais recente desta correção deve ser verificada separadamente. Não foi executado teste autenticado real de cadastro/aprovação no navegador.
