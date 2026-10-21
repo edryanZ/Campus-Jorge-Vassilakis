@@ -419,33 +419,165 @@ const AUDIT_APP = (() => {
   const authModal = document.getElementById('authModal');
   const authButton = document.getElementById('authBtn');
   const authForm = document.getElementById('authForm');
+  const signupForm = document.getElementById('signupForm');
+  const showSignupButton = document.getElementById('showSignupBtn');
+  const backToLoginButton = document.getElementById('backToLoginBtn');
   const authStatus = document.getElementById('authStatus');
   const signOutButton = document.getElementById('signOutBtn');
   const syncNowButton = document.getElementById('syncNowBtn');
+  const adminPanel = document.getElementById('adminRequestsPanel');
+  const adminList = document.getElementById('accountRequestsList');
+  const adminStatus = document.getElementById('accountRequestsStatus');
+  const refreshAccounts = document.getElementById('refreshAccountRequests');
+  let currentAccess = null;
+  let authGeneration = 0;
 
-  function setAuthState(user, message = '') {
+  async function loadAccessRequests() {
+    adminStatus.textContent = 'Consultando solicitações…';
+    adminList.replaceChildren();
+    try {
+      const rows = await AUDIT_REMOTE.listAccessRequests();
+      adminStatus.textContent = rows.length ? `${rows.length} conta(s) encontrada(s)` : 'Nenhuma solicitação até agora.';
+      for (const item of rows) {
+        const card = document.createElement('article');
+        card.className = 'admin-request-card';
+        const heading = document.createElement('strong');
+        heading.textContent = item.display_name || 'Sem nome informado';
+        const info = document.createElement('p');
+        info.textContent = `${item.email || 'Sem e-mail'} · ${item.confirmed ? 'E-mail confirmado' : 'Aguardando confirmação do e-mail'}`;
+        const situation = document.createElement('small');
+        situation.textContent = item.active ? 'Conta aprovada' : item.review_status === 'REJECTED' ? 'Acesso recusado' : 'Aguardando aprovação';
+        card.append(heading, info, situation);
+        const buttons = document.createElement('div');
+        buttons.className = 'admin-request-actions';
+        if (!item.active) {
+          const approve = document.createElement('button');
+          approve.type = 'button';
+          approve.className = 'audit-primary';
+          approve.textContent = 'Aprovar';
+          approve.disabled = !item.confirmed;
+          if (!item.confirmed) approve.title = 'A pessoa precisa confirmar seu e-mail.';
+          approve.addEventListener('click', () => reviewRequest(item.user_id, true));
+          buttons.append(approve);
+        }
+        if (item.review_status !== 'REJECTED' || item.active) {
+          const reject = document.createElement('button');
+          reject.type = 'button';
+          reject.className = 'audit-secondary';
+          reject.textContent = item.active ? 'Revogar acesso' : 'Recusar';
+          reject.addEventListener('click', () => reviewRequest(item.user_id, false));
+          buttons.append(reject);
+        }
+        card.append(buttons);
+        adminList.append(card);
+      }
+    } catch (error) {
+      adminStatus.textContent = `Não foi possível carregar solicitações: ${error.message || error}`;
+    }
+  }
+
+  async function reviewRequest(userId, approve) {
+    const action = approve ? 'aprovar' : 'recusar/revogar';
+    if (!window.confirm(`Deseja realmente ${action} o acesso desta conta?`)) return;
+    adminStatus.textContent = 'Salvando decisão…';
+    try {
+      await AUDIT_REMOTE.reviewAccessRequest(userId, approve);
+      await loadAccessRequests();
+      adminStatus.textContent = approve ? 'Conta aprovada. A pessoa já pode realizar auditorias.' : 'Acesso recusado ou revogado.';
+    } catch (error) {
+      adminStatus.textContent = `Não foi possível salvar: ${error.message || error}`;
+    }
+  }
+
+  async function setAuthState(user, message = '') {
+    const generation = ++authGeneration;
     const authenticated = Boolean(user);
-    authButton.textContent = authenticated ? 'Conta e sincronização' : 'Entrar';
+    authButton.textContent = authenticated ? 'Minha conta' : 'Entrar';
     authForm.hidden = authenticated || !AUDIT_REMOTE.configured;
+    signupForm.hidden = true;
+    showSignupButton.hidden = authenticated || !AUDIT_REMOTE.configured;
     signOutButton.hidden = !authenticated;
-    syncNowButton.hidden = !authenticated;
-    authStatus.className = `auth-status ${authenticated ? 'is-success' : (!AUDIT_REMOTE.configured ? 'is-error' : '')}`;
-    authStatus.textContent = message || (authenticated
-      ? `Conectado como ${user.email}. Registros pendentes serão sincronizados.`
-      : AUDIT_REMOTE.configured
-        ? 'Entre com uma conta autorizada para recuperar e sincronizar auditorias.'
-        : 'Supabase não configurado. O modo local continua disponível.');
+    syncNowButton.hidden = true;
+    adminPanel.hidden = true;
+    currentAccess = null;
+    if (!authenticated) {
+      authStatus.className = AUDIT_REMOTE.configured ? 'auth-status' : 'auth-status is-error';
+      authStatus.textContent = message || (AUDIT_REMOTE.configured
+        ? 'Consulte resultados publicados sem login ou entre com uma conta autorizada para auditar.'
+        : 'Cadastro temporariamente indisponível. Supabase não configurado.');
+      return;
+    }
+    authStatus.className = 'auth-status';
+    authStatus.textContent = 'Verificando autorização da conta…';
+    try {
+      const access = await AUDIT_REMOTE.getAccess();
+      if (generation !== authGeneration) return;
+      currentAccess = access;
+      if (access?.canAudit) {
+        authStatus.className = 'auth-status is-success';
+        authStatus.textContent = message || `Conta autorizada (${access.admin ? 'Administrador' : 'Auditor'})${access.offline ? ' · autorização offline temporária' : ''}.`;
+        syncNowButton.hidden = Boolean(access.offline);
+        adminPanel.hidden = !access.admin || access.offline;
+        if (access.admin && !access.offline) loadAccessRequests();
+      } else {
+        authStatus.className = 'auth-status';
+        authStatus.textContent = access?.reviewStatus === 'REJECTED'
+          ? 'O acesso de auditor desta conta foi recusado ou revogado. Você ainda pode consultar resultados publicados.'
+          : access?.reviewStatus === 'OFFLINE'
+            ? 'Sem conexão para validar a autorização. Conecte-se à internet para continuar.'
+            : 'Conta cadastrada, mas ainda sem autorização para realizar auditorias. Aguarde aprovação do administrador.';
+      }
+    } catch (error) {
+      if (generation !== authGeneration) return;
+      authStatus.className = 'auth-status is-error';
+      authStatus.textContent = `Falha ao verificar autorização: ${error.message || error}`;
+    }
   }
 
   function openAuthModal() {
     authModal.hidden = false;
+    document.body.classList.add('audit-open');
     requestAnimationFrame(() => authModal.querySelector('input:not([hidden]), button')?.focus());
   }
-
-  function closeAuthModal() { authModal.hidden = true; authButton.focus(); }
-
+  function closeAuthModal() {
+    authModal.hidden = true;
+    if (modal.hidden && centerModal.hidden) document.body.classList.remove('audit-open');
+    authButton.focus();
+  }
   authButton.addEventListener('click', openAuthModal);
   authModal.querySelectorAll('[data-auth-close]').forEach(element => element.addEventListener('click', closeAuthModal));
+  showSignupButton.addEventListener('click', () => {
+    authForm.hidden = true;
+    signupForm.hidden = false;
+    showSignupButton.hidden = true;
+    authStatus.className = 'auth-status';
+    authStatus.textContent = 'Solicite sua conta. O administrador precisará aprovar o acesso.';
+    signupForm.querySelector('input')?.focus();
+  });
+  backToLoginButton.addEventListener('click', () => {
+    signupForm.hidden = true;
+    authForm.hidden = false;
+    showSignupButton.hidden = false;
+  });
+  signupForm.addEventListener('submit', async event => {
+    event.preventDefault();
+    const values = new FormData(signupForm);
+    const button = signupForm.querySelector('button[type="submit"]');
+    button.disabled = true;
+    authStatus.textContent = 'Enviando solicitação…';
+    try {
+      await AUDIT_REMOTE.requestAccount(values.get('displayName'), values.get('email'), values.get('password'));
+      signupForm.reset();
+      signupForm.hidden = true;
+      authForm.hidden = false;
+      showSignupButton.hidden = false;
+      authStatus.className = 'auth-status is-success';
+      authStatus.textContent = 'Solicitação enviada. Se receber um e-mail de confirmação, confirme o endereço. Após isso, aguarde a aprovação do administrador.';
+    } catch (error) {
+      authStatus.className = 'auth-status is-error';
+      authStatus.textContent = `Não foi possível solicitar a conta: ${error.message || error}`;
+    } finally { button.disabled = false; }
+  });
   authForm.addEventListener('submit', async event => {
     event.preventDefault();
     const values = new FormData(authForm);
@@ -454,15 +586,20 @@ const AUDIT_APP = (() => {
     try {
       const user = await AUDIT_REMOTE.signIn(values.get('email'), values.get('password'));
       authForm.reset();
-      setAuthState(user, `Conectado como ${user.email}. Sincronização iniciada.`);
+      await setAuthState(user);
     } catch (error) {
       authStatus.className = 'auth-status is-error';
-      authStatus.textContent = `Não foi possível entrar: ${error.message || 'verifique os dados e a configuração.'}`;
+      authStatus.textContent = `Não foi possível entrar: ${error.message || error}`;
     }
   });
   signOutButton.addEventListener('click', async () => {
-    try { await AUDIT_REMOTE.signOut(); setAuthState(null, 'Sessão encerrada. Os dados locais foram preservados.'); }
-    catch (error) { setAuthState(null, `Falha ao sair: ${error.message}`); }
+    try {
+      await AUDIT_REMOTE.signOut();
+      await setAuthState(null, 'Sessão encerrada. Nenhuma auditoria local foi apagada.');
+    } catch (error) {
+      authStatus.className = 'auth-status is-error';
+      authStatus.textContent = `Falha ao sair: ${error.message || error}`;
+    }
   });
   syncNowButton.addEventListener('click', async () => {
     authStatus.className = 'auth-status';
@@ -471,14 +608,15 @@ const AUDIT_APP = (() => {
       const result = await AUDIT_REMOTE.syncPending();
       authStatus.className = result.failed ? 'auth-status is-error' : 'auth-status is-success';
       authStatus.textContent = result.skipped
-        ? 'Nada foi enviado. Verifique a conexão e a autenticação.'
+        ? 'Nada foi enviado. Verifique a conexão e a autorização.'
         : `${result.synced} registro(s) sincronizado(s); ${result.failed} falha(s); ${result.pendingEvidence || 0} evidência(s) pendente(s).`;
     } catch (error) {
       authStatus.className = 'auth-status is-error';
-      authStatus.textContent = `Falha na sincronização: ${error.message}`;
+      authStatus.textContent = `Falha na sincronização: ${error.message || error}`;
     }
   });
-  AUDIT_REMOTE.onAuthStateChange((_event, user) => setAuthState(user));
+  refreshAccounts.addEventListener('click', loadAccessRequests);
+  AUDIT_REMOTE.onAuthStateChange((_event, user) => { setAuthState(user).catch(error => console.error('[Auth]', error)); });
 
   // v16: central de consulta, sem regravar auditorias nem iniciar sincronizacao automatica.
   const centerModal = document.getElementById('auditCenterModal');
