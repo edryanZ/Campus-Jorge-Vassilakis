@@ -298,7 +298,10 @@ const AUDIT_APP = (() => {
       if (AUDIT_REMOTE.configured && navigator.onLine) AUDIT_REMOTE.flushSync(audit.auditId).catch(error => console.warn('[AuditRemote]', error));
     }
     modal.hidden = true;
-    document.body.classList.remove('audit-open');
+    if (typeof authModal === 'undefined' || authModal.hidden) {
+      if (typeof centerModal === 'undefined' || centerModal.hidden)
+        document.body.classList.remove('audit-open');
+    }
     previouslyFocusedElement?.focus?.();
   }
 
