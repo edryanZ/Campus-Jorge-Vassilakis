@@ -70,3 +70,7 @@ A sincronização automática pula rascunhos sem dono até que essa autorizaçã
 - Central aberta por auditor aprovado: os registros autorizados locais e remotos são apresentados.
 
 Não foi realizado teste real de criação de conta, e-mail ou aprovação no navegador. A última implantação da Vercel precisa ser verificada pelo status do commit mais recente antes de tratar a versão como pronta.
+
+## Verificação operacional de implantação
+
+A Vercel retorna 403 ao tentar listar ou criar deployments por esta integração. Isso **não significa** que a conexão Git do projeto esteja incorreta. O status do commit `8e20dc811e32c998cacf2d8aac96505ff675f969` não foi confirmado por esta integração. A branch de testes é mantida separada de `main`; nenhuma implantação de produção deve ser presumida.
