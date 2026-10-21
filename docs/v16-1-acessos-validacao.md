@@ -54,3 +54,19 @@ A verificação posterior confirmou a presença dessas políticas e a preservaç
 - O login permanece concluído mesmo se a sincronização posterior falhar.
 - Teste de código com conta autorizada e auditoria pertencente a outro usuário: `OTHER_OWNER`, 0 chamadas RPC, 0 gravações locais.
 - A implantação mais recente desta correção deve ser verificada separadamente. Não foi executado teste autenticado real de cadastro/aprovação no navegador.
+
+## Complemento v16.1.6 — consentimento para rascunhos legados
+
+Ao abrir ou continuar uma auditoria antiga com `ownerId=null`, criada sem conta, uma pessoa aprovada precisa **confirmar explicitamente** que deseja vincular aquele rascunho à sua conta. Cancelar não remove nem modifica o registro.
+
+A sincronização automática pula rascunhos sem dono até que essa autorização seja dada na sessão da conta atual. A autorização temporária é ligada ao ID da auditoria e ao ID do usuário; é limpa ao sair e não passa de uma conta para outra. Assim, o login sozinho não assume rascunhos anônimos.
+
+**Testes simulados (sem acesso ao banco real):**
+
+- Conta aprovada + rascunho sem dono + nenhuma autorização: sincronização `LEGACY_ADOPTION_NOT_APPROVED`, **zero RPCs e zero gravações locais**.
+- Sincronização pendente com rascunho sem dono e sem autorização: **0 enviados e 0 falhas**.
+- Após consentimento: a sincronização passa a tentar a RPC prevista, com a chamada remota interceptada por mock (sem alteração de dados reais).
+- Central aberta por visitante e por conta pendente, com nenhuma publicação: **0 registros privados** e mensagem explicativa.
+- Central aberta por auditor aprovado: os registros autorizados locais e remotos são apresentados.
+
+Não foi realizado teste real de criação de conta, e-mail ou aprovação no navegador. A última implantação da Vercel precisa ser verificada pelo status do commit mais recente antes de tratar a versão como pronta.
