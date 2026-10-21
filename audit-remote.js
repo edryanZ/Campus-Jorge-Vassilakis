@@ -299,9 +299,10 @@ const AUDIT_REMOTE = (() => {
     const user = await currentUser();
     const items = [];
     if (user) {
+      // Nunca filtrar owner_id no cliente: RLS permite ao ADMIN consultar os registros autorizados de outros auditores.
       const owned = await client.from('audits')
         .select('id,environment_id,status,updated_at,completed_at,server_revision,owner_id,sync_complete')
-        .eq('owner_id', user.id).order('updated_at', { ascending: false }).limit(1000);
+        .order('updated_at', { ascending: false }).limit(1000);
       if (owned.error) throw owned.error;
       for (const row of owned.data || []) {
         items.push({
