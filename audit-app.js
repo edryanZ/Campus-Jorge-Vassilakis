@@ -158,6 +158,12 @@ const AUDIT_APP = (() => {
       }
     }
     if (!local) {
+      // Não iniciar rascunho novo offline sem conferir a ocupação global.
+      // Uma auditoria já existente no dispositivo continua acessível offline.
+      if (AUDIT_REMOTE.configured && !navigator.onLine) {
+        window.alert('Para iniciar uma nova auditoria, conecte-se à internet para verificar se o ambiente já está sendo auditado. Auditorias existentes neste dispositivo continuam preservadas.');
+        return;
+      }
       const proposed = createAudit(environment, owner);
       if (AUDIT_REMOTE.configured && navigator.onLine && !owner.startsWith('LOCAL:')) {
         try {
