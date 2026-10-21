@@ -72,6 +72,14 @@ const AUDIT_APP = (() => {
     if (!local && !owner.startsWith('LOCAL:')) {
       local = await AUDIT_STORAGE.findActive(environment.environmentId, `LOCAL:${await AUDIT_STORAGE.getDeviceId()}`);
     }
+    if (local && !local.ownerId && !owner.startsWith('LOCAL:')) {
+      const accepted = window.confirm(
+        'Existe uma auditoria antiga neste dispositivo sem conta vinculada. Deseja assumir este rascunho na sua conta? ' +
+        'Se escolher Cancelar, ele ficará preservado e não será enviado ao Supabase.'
+      );
+      if (!accepted) return;
+      await AUDIT_REMOTE.approveLegacyAdoption(local);
+    }
     if (AUDIT_REMOTE.configured && navigator.onLine && !owner.startsWith('LOCAL:')) {
       const remote = await AUDIT_REMOTE.findRemoteActive(environment.environmentId);
       if (remote && local && remote.auditId !== local.auditId) {
@@ -169,7 +177,15 @@ const AUDIT_APP = (() => {
       if (!candidate || AUDIT_SYNC_CORE.isRecoveryAudit(candidate)) return;
       const ownerKey = AUDIT_SYNC_CORE.ownerKey(candidate);
       if (ownerKey !== (await AUDIT_REMOTE.ownerKey()) &&
-          ownerKey !== `LOCAL:${await AUDIT_STORAGE.getDeviceId()}`) return;
+          ownerKey !== `LOCAL:${await AUDIT_STORAGE.getDeviceId()}` && ownerKey !== null) return;
+      if (!candidate.ownerId) {
+        const accepted = window.confirm(
+          'Este é um rascunho antigo sem conta vinculada. Deseja recuperá-lo na sua conta? ' +
+          'Se cancelar, o registro será preservado sem sincronização.'
+        );
+        if (!accepted) return;
+        await AUDIT_REMOTE.approveLegacyAdoption(candidate);
+      }
       audit = candidate;
       isDirty = false;
       stepIndex = audit.currentStep || 0;
