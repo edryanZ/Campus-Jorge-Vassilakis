@@ -362,13 +362,27 @@ const AUDIT_APP = (() => {
       try { access = await AUDIT_REMOTE.getAccess(); } catch (_error) { /* Visita pública. */ }
       const canAudit = Boolean(access?.canAudit);
       const owner = canAudit ? await AUDIT_REMOTE.ownerKey() : null;
+      let occupancy = [];
+      if (canAudit && navigator.onLine && AUDIT_REMOTE.configured) {
+        try { occupancy = await AUDIT_REMOTE.listActiveOccupancy(); }
+        catch (error) { console.warn('[AuditOccupancy] Ocupação não disponível:', error); }
+      }
+      const occupiedByEnvironment = new Map(occupancy.map(slot => [slot.environment_id, slot]));
       const rows = await Promise.all(environments.map(async target => {
         if (!canAudit) return `<button type="button" data-map-id="${target.mapId}"><span>${target.roomNumber ? `Sala ${target.roomNumber} — ` : ''}${escapeHtml(target.name)}</span><small>Consultar resultados publicados</small></button>`;
         const records = (await AUDIT_STORAGE.listByEnvironment(target.environmentId))
           .filter(record => !AUDIT_SYNC_CORE.isRecoveryAudit(record) && (access.admin || AUDIT_SYNC_CORE.ownerKey(record) === owner));
         const active = await AUDIT_STORAGE.findActive(target.environmentId, owner);
         const last = records[0];
-        return `<button type="button" data-map-id="${target.mapId}"><span>${target.roomNumber ? `Sala ${target.roomNumber} — ` : ''}${escapeHtml(target.name)}</span><small>${active ? 'Em andamento · continuar' : last ? `Última: ${statusLabel(last.status)}` : 'Não auditado'}</small></button>`;
+        const occupied = occupiedByEnvironment.get(target.environmentId);
+        const ownerIsCurrent = active?.auditId === occupied?.audit_id && active?.ownerId === owner;
+        const situation = occupied
+          ? ownerIsCurrent
+            ? 'Em andamento · continuar'
+            : `Em andamento · Responsável: ${occupied.responsible_name || 'Auditor responsável'}`
+          : active ? 'Em andamento · rascunho local'
+            : last ? `Última: ${statusLabel(last.status)}` : 'Não auditado';
+        return `<button type="button" data-map-id="${target.mapId}"><span>${target.roomNumber ? `Sala ${target.roomNumber} — ` : ''}${escapeHtml(target.name)}</span><small>${escapeHtml(situation)}</small></button>`;
       }));
       section.innerHTML = `<h3>Ambientes</h3>${rows.join('')}`;
       section.querySelectorAll('[data-map-id]').forEach(button => button.addEventListener('click',
@@ -964,7 +978,9 @@ const AUDIT_APP = (() => {
       const heading = document.createElement('strong');
       heading.textContent = env ? `${env.blockName} · ${env.roomNumber ? 'Sala ' + env.roomNumber + ' — ' : ''}${env.name}` : item.environmentId;
       const info = document.createElement('p');
-      info.textContent = `${centerStatus(item)} · ${item.syncState === 'SYNCED' ? 'Sincronizada' : item.syncState === 'CONFLICT' ? 'Conflito preservado' : item.remoteOnly ? 'No Supabase' : 'Local / pendente'} · ${item.updatedAt ? new Date(item.updatedAt).toLocaleString('pt-BR') : 'Sem data'}`;
+      info.textContent = item.occupancyOnly
+        ? `${centerStatus(item)} · Ambiente ocupado por outro auditor · ${item.updatedAt ? new Date(item.updatedAt).toLocaleString('pt-BR') : 'Sem data'}`
+        : `${centerStatus(item)} · ${item.syncState === 'SYNCED' ? 'Sincronizada' : item.syncState === 'CONFLICT' ? 'Conflito preservado' : item.remoteOnly ? 'No Supabase' : 'Local / pendente'} · ${item.updatedAt ? new Date(item.updatedAt).toLocaleString('pt-BR') : 'Sem data'}`;
       if (item.responsibleName) info.textContent += ` · Responsável: ${item.responsibleName}`;
       const action = document.createElement('button');
       action.type = 'button';
