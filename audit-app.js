@@ -115,8 +115,11 @@ const AUDIT_APP = (() => {
           const result = await AUDIT_REMOTE.resumeOrCreateActive(proposed);
           local = result.audit;
         } catch (error) {
-          console.warn('[AuditRemote] Retomada remota indisponível; rascunho local preservado.', error);
-          local = proposed;
+          // Sem confirmação remota, não criar um novo rascunho ativo:
+          // outro auditor pode ter ocupado a sala entre a consulta e o RPC.
+          console.warn('[AuditRemote] Criação não confirmada; ambiente protegido contra duplicidade.', error);
+          window.alert('Não foi possível confirmar a criação da auditoria no servidor. Nenhum novo rascunho foi criado. Atualize e tente novamente.');
+          return;
           local.syncError = `Retomada remota pendente: ${error.message || 'falha de conexão'}`;
         }
       } else local = proposed;
