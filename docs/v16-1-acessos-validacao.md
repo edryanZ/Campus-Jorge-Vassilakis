@@ -38,3 +38,11 @@ Verificar no painel Supabase, em Authentication, que cadastro por e-mail/senha e
 **Limite offline:** um auditor já verificado pode continuar trabalhando até 24 horas offline no mesmo aparelho. A revogação entra em vigor no servidor imediatamente; dados offline não são sincronizados sem aprovação atual. Sem uma autorização anterior válida, não é permitido iniciar auditorias offline.
 
 Não executar os passos de cadastro/publicação com contas ou auditorias reais sem intenção explícita. Código e banco foram verificados, mas testes autenticados completos no navegador ainda precisam ser confirmados.
+
+## Complemento de segurança v16.1.2
+
+A migração adicional `supabase/migrations/20261021_v16_1_2_harden_access.sql` foi aplicada com sucesso ao mesmo Supabase. Foram adicionadas políticas restritivas para INSERT em `audits` e `audit_revisions`, e para SELECT/INSERT de arquivos do bucket `audit-evidence`. Isso impede que uma conta autenticada, porém pendente ou revogada, contorne o bloqueio da interface por chamadas diretas à API.
+
+A verificação posterior confirmou a presença dessas políticas e a preservação de 1 auditoria, 33 revisões, 1 evidência, 1 perfil e 0 publicações.
+
+**Pendências de validação:** ainda não foi realizado um teste real ponta a ponta com e-mail novo confirmado e aprovação no navegador. O relatório de segurança do Supabase também recomenda ativar proteção contra senhas vazadas em Authentication; essa opção não foi alterada automaticamente.
