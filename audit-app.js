@@ -47,6 +47,17 @@ const AUDIT_APP = (() => {
   async function openAudit(mapId) {
     const target = AUDIT_DATA.getEnvironmentByMapId(mapId);
     if (!target) return;
+    let access;
+    try { access = await AUDIT_REMOTE.getAccess(); }
+    catch (error) { console.warn('[AuditAccess] Falha ao validar autorização:', error); }
+    if (!access?.canAudit) {
+      openAuthModal();
+      authStatus.className = 'auth-status';
+      authStatus.textContent = access?.reviewStatus === 'REJECTED'
+        ? 'Seu acesso de auditor foi recusado ou revogado. Consulte apenas resultados publicados.'
+        : 'Para criar ou continuar uma auditoria, entre com uma conta aprovada pelo administrador.';
+      return;
+    }
     const owner = await AUDIT_REMOTE.ownerKey();
     const key = `${owner}::${target.environmentId}`;
     if (openLocks.has(key)) return openLocks.get(key);
@@ -109,12 +120,22 @@ const AUDIT_APP = (() => {
   async function openHistory(mapId) {
     environment = AUDIT_DATA.getEnvironmentByMapId(mapId);
     if (!environment) return;
-    if (AUDIT_REMOTE.configured && navigator.onLine) {
+    let access = null;
+    try { access = await AUDIT_REMOTE.getAccess(); }
+    catch (error) { console.warn('[AuditAccess] Histórico privado indisponível:', error); }
+    if (access?.canAudit && AUDIT_REMOTE.configured && navigator.onLine) {
       try { await AUDIT_REMOTE.pullRemote(); } catch (error) { console.warn('[AuditRemote] Histórico remoto indisponível.', error); }
     }
-    const allLocalItems = await AUDIT_STORAGE.listByEnvironment(environment.environmentId);
-    const localItems = allLocalItems.filter(item => !AUDIT_SYNC_CORE.isRecoveryAudit(item));
-    const recoveries = await AUDIT_STORAGE.listRecoveries(environment.environmentId);
+    const owner = access?.canAudit ? await AUDIT_REMOTE.ownerKey() : null;
+    const deviceKey = owner ? `LOCAL:${await AUDIT_STORAGE.getDeviceId()}` : null;
+    const allLocalItems = access?.canAudit ? await AUDIT_STORAGE.listByEnvironment(environment.environmentId) : [];
+    const localItems = allLocalItems.filter(item =>
+      !AUDIT_SYNC_CORE.isRecoveryAudit(item) &&
+      (access.admin || AUDIT_SYNC_CORE.ownerKey(item) === owner ||
+       (AUDIT_SYNC_CORE.ownerKey(item) === deviceKey && item.ownerId == null)));
+    const recoveries = access?.admin
+      ? await AUDIT_STORAGE.listRecoveries(environment.environmentId)
+      : { legacy: [], conflicts: [] };
     let publicItems = [];
     if (AUDIT_REMOTE.configured && navigator.onLine) {
       try { publicItems = await AUDIT_REMOTE.listPublic(environment.environmentId); }
@@ -133,14 +154,22 @@ const AUDIT_APP = (() => {
       <small class="sync-badge">${syncLabel(item.syncState)}</small>
       ${evidenceStatusMarkup(evidenceByAudit.get(item.auditId))}
       ${item.syncState === 'CONFLICT' ? '<small class="sync-badge">Revisão necessária: versões local e remota foram preservadas</small>' : ''}
-      ${item.publicOnly ? '<small>Registro público sanitizado</small>' : ''}
-      ${item.status !== AUDIT_DATA.STATUS.COMPLETED && !item.publicOnly ? `<button type="button" data-resume="${item.auditId}">Continuar auditoria</button>` : ''}</article>`).join('')}
+      ${item.publicOnly ? `<button type="button" data-public-id="${escapeHtml(item.auditId)}">Ver resultados públicos</button>` : ''}
+      ${item.status !== AUDIT_DATA.STATUS.COMPLETED && !item.publicOnly &&
+        (AUDIT_SYNC_CORE.ownerKey(item) === owner || AUDIT_SYNC_CORE.ownerKey(item) === deviceKey)
+          ? `<button type="button" data-resume="${escapeHtml(item.auditId)}">Continuar auditoria</button>` : ''}</article>`).join('')}
       ${recoveries.legacy.map(item => `<article><strong>Cópia de recuperação preservada</strong><span>${new Date(item.updatedAt).toLocaleString('pt-BR')}</span><small class="sync-badge">Não é um rascunho ativo e não será sincronizada automaticamente</small></article>`).join('')}
       ${recoveries.conflicts.map(item => `<article><strong>Conflito aguardando resolução</strong><span>${new Date(item.createdAt).toLocaleString('pt-BR')}</span><small class="sync-badge">${escapeHtml(item.reason)} · ambas as versões e o manifesto de evidências foram preservados</small></article>`).join('')}</div>`
       : '<div class="audit-empty"><h3>Nenhuma auditoria registrada</h3><p>O histórico deste ambiente ainda está vazio.</p></div>';
+    content.querySelectorAll('[data-public-id]').forEach(button =>
+      button.addEventListener('click', () => showPublicAudit(button.dataset.publicId)));
     content.querySelectorAll('[data-resume]').forEach(button => button.addEventListener('click', async () => {
+      if (!(await AUDIT_REMOTE.getAccess())?.canAudit) return;
       const candidate = await AUDIT_STORAGE.getAudit(button.dataset.resume);
       if (!candidate || AUDIT_SYNC_CORE.isRecoveryAudit(candidate)) return;
+      const ownerKey = AUDIT_SYNC_CORE.ownerKey(candidate);
+      if (ownerKey !== (await AUDIT_REMOTE.ownerKey()) &&
+          ownerKey !== `LOCAL:${await AUDIT_STORAGE.getDeviceId()}`) return;
       audit = candidate;
       isDirty = false;
       stepIndex = audit.currentStep || 0;
@@ -158,15 +187,21 @@ const AUDIT_APP = (() => {
       section.innerHTML = '<h3>Auditoria ambiental</h3><p>O levantamento do Bloco K ainda está incompleto. Nenhum ambiente foi habilitado para coleta nesta etapa.</p>';
     } else {
       const environments = AUDIT_DATA.environments.filter(environment => environment.blockId === item.id);
-      const owner = await AUDIT_REMOTE.ownerKey();
+      let access = null;
+      try { access = await AUDIT_REMOTE.getAccess(); } catch (_error) { /* Visita pública. */ }
+      const canAudit = Boolean(access?.canAudit);
+      const owner = canAudit ? await AUDIT_REMOTE.ownerKey() : null;
       const rows = await Promise.all(environments.map(async target => {
-        const records = (await AUDIT_STORAGE.listByEnvironment(target.environmentId)).filter(record => !AUDIT_SYNC_CORE.isRecoveryAudit(record));
+        if (!canAudit) return `<button type="button" data-map-id="${target.mapId}"><span>${target.roomNumber ? `Sala ${target.roomNumber} — ` : ''}${escapeHtml(target.name)}</span><small>Consultar resultados publicados</small></button>`;
+        const records = (await AUDIT_STORAGE.listByEnvironment(target.environmentId))
+          .filter(record => !AUDIT_SYNC_CORE.isRecoveryAudit(record) && (access.admin || AUDIT_SYNC_CORE.ownerKey(record) === owner));
         const active = await AUDIT_STORAGE.findActive(target.environmentId, owner);
         const last = records[0];
         return `<button type="button" data-map-id="${target.mapId}"><span>${target.roomNumber ? `Sala ${target.roomNumber} — ` : ''}${escapeHtml(target.name)}</span><small>${active ? 'Em andamento · continuar' : last ? `Última: ${statusLabel(last.status)}` : 'Não auditado'}</small></button>`;
       }));
       section.innerHTML = `<h3>Ambientes</h3>${rows.join('')}`;
-      section.querySelectorAll('[data-map-id]').forEach(button => button.addEventListener('click', () => openAudit(button.dataset.mapId)));
+      section.querySelectorAll('[data-map-id]').forEach(button => button.addEventListener('click',
+        () => canAudit ? openAudit(button.dataset.mapId) : openHistory(button.dataset.mapId)));
     }
     panel.insertBefore(section, panel.querySelector('.details-actions'));
   }
