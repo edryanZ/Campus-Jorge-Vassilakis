@@ -177,6 +177,83 @@ const AUDIT_APP = (() => {
     }));
   }
 
+  async function showPublicAudit(auditId) {
+    if (typeof centerModal !== 'undefined') centerModal.hidden = true;
+    audit = null;
+    openModal();
+    title.textContent = 'Resultado público da auditoria';
+    environmentLabel.textContent = 'Consultando resultado aprovado…';
+    content.replaceChildren();
+    const notice = document.createElement('p');
+    notice.className = 'audit-note';
+    notice.textContent = 'Carregando os dados públicos autorizados…';
+    content.append(notice);
+    try {
+      const result = await AUDIT_REMOTE.getPublishedAudit(auditId);
+      const target = AUDIT_DATA.getEnvironment(result.environmentId);
+      environmentLabel.textContent = target
+        ? `${target.blockName} · ${target.roomNumber ? 'Sala ' + target.roomNumber + ' · ' : ''}${target.name}`
+        : result.environmentId;
+      content.replaceChildren();
+      const introduction = document.createElement('p');
+      introduction.className = 'audit-note';
+      introduction.textContent = 'Consulta pública, somente leitura. Dados pessoais, observações internas e fotografias privadas não são disponibilizados.';
+      content.append(introduction);
+      const completion = document.createElement('p');
+      completion.textContent = `Auditoria concluída${result.completedAt ? ' em ' + new Date(result.completedAt).toLocaleDateString('pt-BR') : ''} · Não conformidades registradas: ${Number(result.summary?.nonConformityCount || 0)}`;
+      content.append(completion);
+      const groups = {
+        lighting: ['Iluminação', { total: 'Total de lâmpadas', led: 'Lâmpadas LED',
+          fluorescent: 'Lâmpadas fluorescentes', other: 'Outras lâmpadas',
+          working: 'Em funcionamento', defective: 'Defeituosas',
+          damagedFixtures: 'Luminárias danificadas', naturalLight: 'Luz natural' }],
+        airConditioning: ['Ar-condicionado', { hasAC: 'Possui ar-condicionado', units: 'Unidades' }],
+        waterWaste: ['Água e resíduos', { hasHydraulics: 'Instalação hidráulica', separation: 'Separação de resíduos' }],
+        conditions: ['Condições ambientais', { naturalLight: 'Iluminação natural',
+          ventilation: 'Ventilação', thermalComfort: 'Conforto térmico',
+          noise: 'Ruído', temperature: 'Temperatura (°C)', noiseDb: 'Ruído (dB)',
+          lux: 'Iluminância (lux)', source: 'Fonte dos dados' }]
+      };
+      let found = false;
+      for (const [key, [label, fields]] of Object.entries(groups)) {
+        const values = result.data?.[key];
+        if (!values || typeof values !== 'object') continue;
+        const present = Object.entries(fields).filter(([field]) =>
+          values[field] !== undefined && values[field] !== null && values[field] !== '');
+        if (!present.length) continue;
+        found = true;
+        const section = document.createElement('section');
+        section.className = 'public-audit-section';
+        const heading = document.createElement('h3');
+        heading.textContent = label;
+        section.append(heading);
+        const list = document.createElement('dl');
+        for (const [field, fieldLabel] of present) {
+          const row = document.createElement('div');
+          row.className = 'public-audit-field';
+          const dt = document.createElement('dt');
+          dt.textContent = fieldLabel;
+          const dd = document.createElement('dd');
+          const value = values[field];
+          dd.textContent = typeof value === 'boolean' ? (value ? 'Sim' : 'Não')
+            : typeof value === 'object' ? JSON.stringify(value) : String(value);
+          row.append(dt, dd);
+          list.append(row);
+        }
+        section.append(list);
+        content.append(section);
+      }
+      if (!found) {
+        const empty = document.createElement('p');
+        empty.textContent = 'Não há indicadores ambientais liberados nesta publicação.';
+        content.append(empty);
+      }
+    } catch (error) {
+      environmentLabel.textContent = 'Consulta pública';
+      notice.textContent = `Não foi possível abrir os resultados publicados: ${error.message || error}`;
+    }
+  }
+
   async function showBlockEnvironments(item) {
     if (item.kind !== 'block') return;
     const panel = document.querySelector('.details-content');
@@ -662,6 +739,7 @@ const AUDIT_APP = (() => {
   const centerSummary = document.getElementById('auditCenterSummary');
   let centerRecords = [];
   let centerLoadNote = '';
+  let centerIsAdmin = false;
   let centerFocus = null;
 
   function centerStatus(item) {
@@ -700,12 +778,15 @@ const AUDIT_APP = (() => {
       info.textContent = `${centerStatus(item)} · ${item.syncState === 'SYNCED' ? 'Sincronizada' : item.syncState === 'CONFLICT' ? 'Conflito preservado' : item.remoteOnly ? 'No Supabase' : 'Local / pendente'} · ${item.updatedAt ? new Date(item.updatedAt).toLocaleString('pt-BR') : 'Sem data'}`;
       const action = document.createElement('button');
       action.type = 'button';
-      action.textContent = 'Ver histórico';
-      action.disabled = !env?.mapId;
+      const published = Boolean(item.publicOnly || item.isPublic);
+      action.textContent = published ? 'Ver resultados públicos' : 'Ver histórico';
+      action.disabled = !published && !env?.mapId;
       action.addEventListener('click', async () => {
         centerModal.hidden = true;
-        try { await openHistory(env.mapId); }
-        catch (error) { console.error('[AuditCenter]', error); centerModal.hidden = false; }
+        try {
+          if (published) await showPublicAudit(item.auditId);
+          else await openHistory(env.mapId);
+        } catch (error) { console.error('[AuditCenter]', error); centerModal.hidden = false; }
       });
       if (item.publicOnly) {
         const note = document.createElement('small');
@@ -713,6 +794,29 @@ const AUDIT_APP = (() => {
         card.append(note);
       }
       card.append(heading, info, action);
+      if (centerIsAdmin && item.status === 'COMPLETED' &&
+          item.syncState === 'SYNCED' && (item.remoteOnly || item.hasRemote) &&
+          item.remoteConfirmed !== false && !item.publicOnly) {
+        const publication = document.createElement('button');
+        publication.type = 'button';
+        publication.className = 'audit-secondary';
+        publication.textContent = item.isPublic ? 'Retirar publicação' : 'Publicar resultado';
+        publication.addEventListener('click', async () => {
+          const willPublish = !item.isPublic;
+          if (!window.confirm(willPublish
+            ? 'Publicar o resultado sanitizado desta auditoria para todos os visitantes?'
+            : 'Retirar este resultado da consulta pública?')) return;
+          publication.disabled = true;
+          try {
+            await AUDIT_REMOTE.setPublication(item.auditId, willPublish);
+            await openCenter();
+          } catch (error) {
+            publication.disabled = false;
+            window.alert('Falha ao alterar publicação: ' + (error.message || error));
+          }
+        });
+        card.append(publication);
+      }
       centerResults.append(card);
     }
   }
@@ -724,8 +828,12 @@ const AUDIT_APP = (() => {
     centerSummary.textContent = 'Carregando registros locais…';
     centerResults.replaceChildren();
     try {
-      const owner = await AUDIT_REMOTE.ownerKey();
-      const all = await AUDIT_STORAGE.listAudits();
+      let access = null;
+      try { access = await AUDIT_REMOTE.getAccess(); }
+      catch (error) { console.warn('[AuditCenter] Autorização indisponível:', error); }
+      centerIsAdmin = Boolean(access?.admin);
+      const owner = access?.canAudit ? await AUDIT_REMOTE.ownerKey() : null;
+      const all = access?.canAudit ? await AUDIT_STORAGE.listAudits() : [];
       const localRecords = all.filter(item => {
         if (AUDIT_SYNC_CORE.isRecoveryAudit(item)) return false;
         const recordOwner = AUDIT_SYNC_CORE.ownerKey(item);
@@ -743,10 +851,12 @@ const AUDIT_APP = (() => {
             if (!existing) merged.set(item.auditId, item);
             else if (existing.syncState === 'SYNCED' && Number(item.serverRevision || 0) > Number(existing.serverRevision || 0))
               merged.set(item.auditId, item);
+            else merged.set(item.auditId, { ...existing, isPublic: Boolean(item.isPublic),
+              remoteConfirmed: Boolean(item.syncComplete), hasRemote: true });
           }
-          centerLoadNote = remote.authenticated
-            ? 'Inclui auditorias autorizadas do Supabase e registros públicos.'
-            : 'Sem login: registros locais e auditorias públicas.';
+          centerLoadNote = access?.canAudit
+            ? 'Inclui registros autorizados do Supabase e resultados públicos.'
+            : 'Consulta livre: somente auditorias publicadas.';
           if (remote.limited) centerLoadNote += ' Consulta limitada aos 1.000 registros mais recentes por origem.';
         } catch (error) {
           centerLoadNote = 'Consulta remota indisponível; registros locais preservados.';
