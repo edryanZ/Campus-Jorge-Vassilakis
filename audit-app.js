@@ -772,6 +772,7 @@ const AUDIT_APP = (() => {
   let centerRecords = [];
   let centerLoadNote = '';
   let centerIsAdmin = false;
+  let centerCanAudit = false;
   let centerFocus = null;
 
   function centerStatus(item) {
@@ -796,7 +797,9 @@ const AUDIT_APP = (() => {
     if (!rows.length) {
       const empty = document.createElement('p');
       empty.className = 'audit-center-empty';
-      empty.textContent = 'Nenhuma auditoria encontrada para estes filtros.';
+      empty.textContent = !centerCanAudit && !query && filter === 'ALL'
+        ? 'Ainda não há resultados publicados. As auditorias em andamento permanecem privadas até serem concluídas, sincronizadas e autorizadas para publicação.'
+        : 'Nenhuma auditoria encontrada para estes filtros.';
       centerResults.append(empty);
       return;
     }
@@ -864,6 +867,7 @@ const AUDIT_APP = (() => {
       try { access = await AUDIT_REMOTE.getAccess(); }
       catch (error) { console.warn('[AuditCenter] Autorização indisponível:', error); }
       centerIsAdmin = Boolean(access?.admin);
+      centerCanAudit = Boolean(access?.canAudit);
       const owner = access?.canAudit ? await AUDIT_REMOTE.ownerKey() : null;
       const deviceKey = access?.canAudit ? `LOCAL:${await AUDIT_STORAGE.getDeviceId()}` : null;
       const all = access?.canAudit ? await AUDIT_STORAGE.listAudits() : [];
