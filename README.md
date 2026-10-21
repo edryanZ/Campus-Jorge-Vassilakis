@@ -1,4 +1,4 @@
-# Mapa interativo – Campus Jorge Vassilakis (v15)
+# Mapa interativo – Campus Jorge Vassilakis (prévia v16.1)
 
 Mapa estático e interativo em HTML, CSS, JavaScript e SVG, criado com base na planta de referência e nas informações confirmadas do Campus Jorge Vassilakis.
 
@@ -17,7 +17,7 @@ Depois acesse `http://localhost:8000`.
 
 O projeto não exige instalação de dependências nem processo de compilação. A biblioteca `supabase-js` está fixada na versão `2.117.3` por CDN e é armazenada pelo service worker após o primeiro carregamento bem-sucedido.
 
-## Segurança e sincronização v15
+## Histórico: segurança e sincronização v15
 
 A auditoria só recebe `SYNCED` depois que a revisão do PostgreSQL, cada objeto do Storage, o metadado com SHA-256 e a função `finalize_audit_sync` são confirmados. Falhas parciais mantêm blobs no IndexedDB e produzem `PENDING` ou `ERROR`. O caminho remoto é determinístico, evitando duplicação em retentativas.
 
@@ -46,7 +46,7 @@ Para atualizar a v14, aplique somente `supabase/migrations/202610140001_v15_resu
 
 ## Estado da integração remota
 
-Os arquivos e scripts estão implementados, mas a sincronização permanece desativada enquanto `supabase-config.js` contiver os placeholders. Execute `supabase/schema.sql` e `supabase/rls.sql`, autorize os usuários e configure somente a URL e a chave **Publishable**. Consulte `docs/SUPABASE.md`.
+**Nesta branch de prévia v16.1**, o arquivo `supabase-config.js` já aponta para o projeto Supabase existente usando URL e chave pública (**Publishable**). Não recrie as tabelas nem reaplique as migrações antigas no banco atual. Para instalações novas e independentes, consulte `docs/SUPABASE.md`. O funcionamento real do cadastro e das autorizações ainda exige validação completa no navegador.
 
 Nunca use `service_role`, `sb_secret_` ou senha do banco no frontend. Sem configuração, a auditoria continua funcionando localmente e mostra claramente que os dados ainda não foram sincronizados.
 
