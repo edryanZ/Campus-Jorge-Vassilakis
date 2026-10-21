@@ -80,8 +80,12 @@ const AUDIT_APP = (() => {
       throw new Error('Ambiente não encontrado no mapa.');
     }
     const existing = await AUDIT_STORAGE.getAudit(auditId);
-    if (existing && existing.syncState !== 'SYNCED' &&
-        ['LOCAL_ONLY', 'PENDING', 'ERROR', 'CONFLICT'].includes(existing.syncState)) {
+    // PENDING também pode significar evidência remota ainda não confirmada.
+    // Só impedir a abertura quando houver edição local distinta da revisão remota.
+    const hasLocalEdit = existing && ['LOCAL_ONLY', 'PENDING', 'ERROR', 'CONFLICT'].includes(existing.syncState) &&
+      (existing.syncError || existing.syncState === 'LOCAL_ONLY' ||
+       existing.syncState === 'CONFLICT' || existing.mutationId !== remote.mutationId);
+    if (hasLocalEdit) {
       window.alert('Existe uma cópia local com alterações pendentes ou em conflito neste dispositivo. Ela foi preservada. Resolva a sincronização antes de abrir a versão compartilhada.');
       return;
     }
