@@ -594,3 +594,31 @@ body.audit-open { overflow: hidden; }
   .app-shell { height: auto; min-height: calc(100dvh - 190px); }
   .audit-center-sheet { width: 100%; max-width: 100%; }
 }
+
+/* v16.1 — cadastro, aprovacao e leitura publica */
+.auth-sheet { overflow-y: auto; max-height: calc(100dvh - 24px); }
+#signupForm[hidden], #authForm[hidden], #showSignupBtn[hidden],
+#signOutBtn[hidden], #syncNowBtn[hidden], #adminRequestsPanel[hidden] {
+  display: none !important;
+}
+#signupForm h3, .admin-requests h3 { margin: 4px 0 0; color: #123653; font-size: 1.05rem; }
+.admin-requests { border-top: 1px solid #e2e8f0; padding-top: 16px; display: grid; gap: 12px; }
+.admin-requests-list { display: grid; gap: 10px; max-height: 45vh; overflow-y: auto; }
+.admin-request-card { display: grid; gap: 7px; padding: 12px; border: 1px solid #d8e3ef; border-radius: 12px; background: #fafcff; }
+.admin-request-card strong { color: #163552; overflow-wrap: anywhere; }
+.admin-request-card p, .admin-request-card small { margin: 0; color: #52657a; overflow-wrap: anywhere; font-size: .83rem; }
+.admin-request-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.admin-request-actions button { width: auto; max-width: 100%; padding: 9px 14px; }
+.admin-request-actions button:disabled { opacity: .5; cursor: not-allowed; }
+#accountRequestsStatus { margin: 0; color: #334155; font-size: .85rem; }
+.public-audit-section { margin: 8px 0 16px; padding: 16px; border: 1px solid #e0e9f2; border-radius: 14px; background: #fafcff; }
+.public-audit-section h3 { margin: 0 0 12px; font-size: 1.07rem; color: #133450; }
+.public-audit-section dl { margin: 0; display: grid; gap: 0; }
+.public-audit-field { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; padding: 9px 0; border-top: 1px solid #e5edf4; }
+.public-audit-field dt { color: #52657a; }
+.public-audit-field dd { margin: 0; color: #183754; font-weight: 650; overflow-wrap: anywhere; }
+@media (max-width: 640px) {
+  .auth-content { padding: 14px; }
+  .public-audit-section { padding: 12px; }
+  .public-audit-field { grid-template-columns: minmax(0, 1fr); gap: 3px; }
+}
