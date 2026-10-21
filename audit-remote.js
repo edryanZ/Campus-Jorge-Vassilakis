@@ -50,6 +50,18 @@ const AUDIT_REMOTE = (() => {
   }
 
   const verifiedAccess = new Map();
+  // Apenas rascunhos anônimos autorizados explicitamente pelo auditor atual.
+  const approvedLocalAdoptions = new Map();
+  async function approveLegacyAdoption(record) {
+    const user = await sessionUser();
+    const access = await getAccess();
+    if (!user || !access?.canAudit || !record?.auditId || record.ownerId)
+      throw new Error('A recuperação exige uma conta de auditor autorizada e um rascunho sem proprietário.');
+    if (record.localOwnerKey && record.localOwnerKey !== `LOCAL:${await AUDIT_STORAGE.getDeviceId()}`)
+      throw new Error('Este registro pertence a outro dispositivo.');
+    approvedLocalAdoptions.set(record.auditId, user.id);
+    return true;
+  }
   async function getAccess() {
     if (!client) return null;
     const user = await sessionUser();
@@ -249,12 +261,15 @@ const AUDIT_REMOTE = (() => {
       return { skipped: true, reason: 'OTHER_OWNER' };
     if (record.localOwnerKey && record.localOwnerKey !== `LOCAL:${await AUDIT_STORAGE.getDeviceId()}`)
       return { skipped: true, reason: 'OTHER_DEVICE' };
+    if (!record.ownerId && approvedLocalAdoptions.get(record.auditId) !== user.id)
+      return { skipped: true, reason: 'LEGACY_ADOPTION_NOT_APPROVED' };
     const audit = structuredClone(record);
     audit.ownerId ||= user.id;
     audit.localOwnerKey = null;
     audit.mutationId ||= newId('MUTATION');
     audit.syncState = 'PENDING'; audit.syncError = null;
     await AUDIT_STORAGE.saveAudit(audit, { allowRemoteMerge: true, enforceActiveUniqueness: true });
+    approvedLocalAdoptions.delete(audit.auditId);
     const call = await client.rpc('sync_audit', {
       p_id: audit.auditId, p_environment_id: audit.environmentId, p_status: audit.status,
       p_private_payload: audit, p_public_payload: AUDIT_SYNC_CORE.publicPayload(audit),
@@ -444,6 +459,7 @@ const AUDIT_REMOTE = (() => {
           const record = await AUDIT_STORAGE.getAudit(id);
           const user = await sessionUser();
           if (!record || (record.ownerId && record.ownerId !== user?.id) ||
+              (!record.ownerId && approvedLocalAdoptions.get(record.auditId) !== user?.id) ||
               (record.localOwnerKey && record.localOwnerKey !== `LOCAL:${await AUDIT_STORAGE.getDeviceId()}`))
             continue;
           const result = await syncAudit(record);
@@ -476,6 +492,9 @@ const AUDIT_REMOTE = (() => {
     if (result.error) throw result.error;
     if (user) {
       verifiedAccess.delete(user.id);
+      for (const [auditId, adoptedBy] of approvedLocalAdoptions) {
+        if (adoptedBy === user.id) approvedLocalAdoptions.delete(auditId);
+      }
       try { localStorage.removeItem(`audit-verified-access:${user.id}`); }
       catch (_error) { /* Armazenamento indisponível. */ }
     }
@@ -489,7 +508,7 @@ const AUDIT_REMOTE = (() => {
 
   window.addEventListener('online', () => syncPending().catch(error => console.error('[AuditRemote]', error)));
   return Object.freeze({
-    configured, client, currentUser, sessionUser, ownerKey, signIn, signOut, requestAccount, getAccess, listAccessRequests, reviewAccessRequest, setPublication, getPublishedAudit, onAuthStateChange,
+    configured, client, currentUser, sessionUser, ownerKey, signIn, signOut, requestAccount, getAccess, approveLegacyAdoption, listAccessRequests, reviewAccessRequest, setPublication, getPublishedAudit, onAuthStateChange,
     findRemoteActive, resumeOrCreateActive, syncAudit, scheduleSync, flushSync, syncPending,
     pullRemote, listPublic, listAccessibleAudits, preserveConflict
   });
