@@ -66,9 +66,46 @@ const AUDIT_APP = (() => {
     return task;
   }
 
+  async function openSharedAudit(auditId) {
+    const access = await AUDIT_REMOTE.getAccess();
+    if (!access?.canAudit || access.offline || !navigator.onLine) {
+      window.alert('A participação compartilhada exige conexão e autorização atualizada.');
+      return;
+    }
+    // Só retorna o payload completo depois da aprovação verificada no servidor.
+    const remote = await AUDIT_REMOTE.getSharedAudit(auditId);
+    if (!remote.collaborationEditorId) {
+      const target = AUDIT_DATA.getEnvironment(remote.environmentId);
+      if (target?.mapId) return openAudit(target.mapId);
+      throw new Error('Ambiente não encontrado no mapa.');
+    }
+    const existing = await AUDIT_STORAGE.getAudit(auditId);
+    if (existing && existing.syncState !== 'SYNCED' &&
+        ['LOCAL_ONLY', 'PENDING', 'ERROR', 'CONFLICT'].includes(existing.syncState)) {
+      window.alert('Existe uma cópia local com alterações pendentes ou em conflito neste dispositivo. Ela foi preservada. Resolva a sincronização antes de abrir a versão compartilhada.');
+      return;
+    }
+    environment = AUDIT_DATA.getEnvironment(remote.environmentId);
+    if (!environment) throw new Error('Ambiente da auditoria não encontrado no mapa.');
+    await AUDIT_STORAGE.saveAudit(remote, { allowRemoteMerge: true, enforceActiveUniqueness: true });
+    audit = remote;
+    isDirty = false;
+    stepIndex = Math.min(audit.currentStep || 0, AUDIT_DATA.STEPS.length - 1);
+    openModal();
+    renderStep();
+    saveState.textContent = 'Participação autorizada · dados compartilhados · edição online';
+  }
+
   async function openAuditLocked(target, owner) {
     environment = target;
     let local = await AUDIT_STORAGE.findActive(environment.environmentId, owner);
+    if (local?.collaborationEditorId && local.collaborationEditorId !== owner) {
+      if (['LOCAL_ONLY','PENDING','ERROR','CONFLICT'].includes(local.syncState)) {
+        window.alert('Existe uma edição compartilhada pendente neste dispositivo. O rascunho foi preservado e não será assumido por outra conta.');
+        return;
+      }
+      local = null; // O proprietário buscará seu próprio registro remoto atualizado.
+    }
     if (!local && !owner.startsWith('LOCAL:')) {
       local = await AUDIT_STORAGE.findActive(environment.environmentId, `LOCAL:${await AUDIT_STORAGE.getDeviceId()}`);
     }
@@ -102,9 +139,20 @@ const AUDIT_APP = (() => {
       }
       const occupied = occupancy.find(item => item.environment_id === environment.environmentId);
       if (occupied) {
-        window.alert('Já existe uma auditoria em andamento nesta sala. Responsável: ' +
-          (occupied.responsible_name || 'Auditor responsável') +
-          '. Uma nova auditoria não será criada. A participação compartilhada dependerá de autorização.');
+        const requests = await AUDIT_REMOTE.listMyParticipation();
+        const status = requests.find(item => item.audit_id === occupied.audit_id)?.status;
+        if (status === 'APPROVED') return openSharedAudit(occupied.audit_id);
+        if (status === 'PENDING') {
+          window.alert('A auditoria desta sala está sob responsabilidade de ' +
+            (occupied.responsible_name || 'outro auditor') + '. Sua participação aguarda aprovação do administrador.');
+          return;
+        }
+        if (window.confirm('Esta sala já está sendo auditada por ' +
+          (occupied.responsible_name || 'outro auditor') +
+          '. Deseja solicitar ao administrador autorização para participar da auditoria existente?')) {
+          await AUDIT_REMOTE.requestAuditParticipation(occupied.audit_id);
+          window.alert('Solicitação enviada. Você poderá continuar a auditoria após aprovação do administrador.');
+        }
         return;
       }
     }
@@ -120,7 +168,6 @@ const AUDIT_APP = (() => {
           console.warn('[AuditRemote] Criação não confirmada; ambiente protegido contra duplicidade.', error);
           window.alert('Não foi possível confirmar a criação da auditoria no servidor. Nenhum novo rascunho foi criado. Atualize e tente novamente.');
           return;
-          local.syncError = `Retomada remota pendente: ${error.message || 'falha de conexão'}`;
         }
       } else local = proposed;
       try {
@@ -365,6 +412,17 @@ const AUDIT_APP = (() => {
           : '<button type="button" class="audit-primary" data-next>Avançar</button>'}
       </nav>`;
     hydrateForm();
+    if (audit?.collaborationEditorId) {
+      const photo = content.querySelector('[data-evidence]');
+      if (photo) {
+        photo.disabled = true;
+        photo.title = 'Fotografias de participantes serão liberadas após a validação da sincronização compartilhada de evidências.';
+        const note = document.createElement('p');
+        note.className = 'audit-note';
+        note.textContent = 'Participação compartilhada: você pode editar os dados, mas novas fotografias devem ser adicionadas pelo responsável original.';
+        photo.closest('label')?.after(note);
+      }
+    }
     const form = content.querySelector('#auditForm');
     form.addEventListener('input', captureForm);
     form.addEventListener('change', captureForm);
@@ -467,6 +525,11 @@ const AUDIT_APP = (() => {
   }
 
   async function storeEvidence(event) {
+    if (audit?.collaborationEditorId) {
+      window.alert('A inclusão de novas evidências está restrita ao responsável original por enquanto.');
+      event.target.value = '';
+      return;
+    }
     const file = event.target.files[0];
     if (!file) return;
     const evidenceId = uid('EVIDENCE');
@@ -832,6 +895,7 @@ const AUDIT_APP = (() => {
       heading.textContent = env ? `${env.blockName} · ${env.roomNumber ? 'Sala ' + env.roomNumber + ' — ' : ''}${env.name}` : item.environmentId;
       const info = document.createElement('p');
       info.textContent = `${centerStatus(item)} · ${item.syncState === 'SYNCED' ? 'Sincronizada' : item.syncState === 'CONFLICT' ? 'Conflito preservado' : item.remoteOnly ? 'No Supabase' : 'Local / pendente'} · ${item.updatedAt ? new Date(item.updatedAt).toLocaleString('pt-BR') : 'Sem data'}`;
+      if (item.responsibleName) info.textContent += ` · Responsável: ${item.responsibleName}`;
       const action = document.createElement('button');
       action.type = 'button';
       const published = Boolean(item.publicOnly || item.isPublic);
@@ -844,6 +908,31 @@ const AUDIT_APP = (() => {
           else await openHistory(env.mapId);
         } catch (error) { console.error('[AuditCenter]', error); centerModal.hidden = false; }
       });
+      if (item.occupancyOnly) {
+        action.textContent = item.participationStatus === 'APPROVED'
+          ? 'Continuar auditoria compartilhada'
+          : item.participationStatus === 'PENDING'
+            ? 'Aguardando aprovação'
+            : 'Solicitar participação';
+        action.disabled = item.participationStatus === 'PENDING';
+        action.addEventListener('click', async () => {
+          action.disabled = true;
+          try {
+            if (item.participationStatus === 'APPROVED') {
+              await openSharedAudit(item.auditId);
+            } else if (window.confirm('Solicitar participação na auditoria de ' +
+              (item.responsibleName || 'outro auditor') + '? O administrador precisará aprovar.')) {
+              await AUDIT_REMOTE.requestAuditParticipation(item.auditId);
+              await openCenter();
+            }
+          } catch (error) {
+            window.alert('Não foi possível processar a participação: ' + (error.message || error));
+          } finally { action.disabled = false; }
+        });
+        card.append(heading, info, action);
+        centerResults.append(card);
+        continue;
+      }
       if (item.publicOnly) {
         const note = document.createElement('small');
         note.textContent = 'Registro público concluído';
