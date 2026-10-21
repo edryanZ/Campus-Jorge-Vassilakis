@@ -243,6 +243,12 @@ const AUDIT_REMOTE = (() => {
   async function syncAuditOnce(record) {
     const user = await currentUser();
     if (!client || !user || !navigator.onLine || AUDIT_SYNC_CORE.isRecoveryAudit(record) || !(await getAccess())?.canAudit) return { skipped: true };
+    // Impede que um usuário sincronize registros privados pertencentes a outra conta
+    // no mesmo dispositivo. Registros antigos sem dono continuam preservados.
+    if (record.ownerId && record.ownerId !== user.id)
+      return { skipped: true, reason: 'OTHER_OWNER' };
+    if (record.localOwnerKey && record.localOwnerKey !== `LOCAL:${await AUDIT_STORAGE.getDeviceId()}`)
+      return { skipped: true, reason: 'OTHER_DEVICE' };
     const audit = structuredClone(record);
     audit.ownerId ||= user.id;
     audit.localOwnerKey = null;
@@ -436,9 +442,13 @@ const AUDIT_REMOTE = (() => {
         try {
           attempts.delete(id);
           const record = await AUDIT_STORAGE.getAudit(id);
-          const result = record && await syncAudit(record);
+          const user = await sessionUser();
+          if (!record || (record.ownerId && record.ownerId !== user?.id) ||
+              (record.localOwnerKey && record.localOwnerKey !== `LOCAL:${await AUDIT_STORAGE.getDeviceId()}`))
+            continue;
+          const result = await syncAudit(record);
           if (result?.synced) synced += 1;
-          else { failed += 1; pendingEvidence += result?.evidence?.pending || result?.evidence?.errors || 0; }
+          else if (!result?.skipped) { failed += 1; pendingEvidence += result?.evidence?.pending || result?.evidence?.errors || 0; }
         } catch (error) { failed += 1; console.error('[AuditRemote]', error); }
       }
       await pullRemote();
@@ -453,7 +463,10 @@ const AUDIT_REMOTE = (() => {
     if (!client) throw new Error('Supabase ainda não foi configurado.');
     const result = await client.auth.signInWithPassword({ email, password });
     if (result.error) throw result.error;
-    if ((await getAccess())?.canAudit) await syncPending();
+    if ((await getAccess())?.canAudit) {
+      try { await syncPending(); }
+      catch (error) { console.warn('[AuditRemote] Login concluído; sincronização pendente:', error); }
+    }
     return result.data.user;
   }
   async function signOut() {
