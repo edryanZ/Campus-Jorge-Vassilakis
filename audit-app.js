@@ -901,7 +901,7 @@ const AUDIT_APP = (() => {
       const published = Boolean(item.publicOnly || item.isPublic);
       action.textContent = published ? 'Ver resultados públicos' : 'Ver histórico';
       action.disabled = !published && !env?.mapId;
-      action.addEventListener('click', async () => {
+      if (!item.occupancyOnly) action.addEventListener('click', async () => {
         centerModal.hidden = true;
         try {
           if (published) await showPublicAudit(item.auditId);
