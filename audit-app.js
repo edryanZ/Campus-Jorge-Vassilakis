@@ -127,8 +127,9 @@ const AUDIT_APP = (() => {
         local = remote;
       }
     }
-    if (!local && AUDIT_REMOTE.configured && navigator.onLine && !owner.startsWith('LOCAL:')) {
-      // A ocupação é consultada no servidor, independentemente do responsável.
+    if (AUDIT_REMOTE.configured && navigator.onLine && !owner.startsWith('LOCAL:')) {
+      // Mesmo que haja rascunho local legado, a sala ocupada por outra
+      // conta nunca pode ser assumida ou sincronizada automaticamente.
       // Não oferecer criação local quando há auditoria ativa de outro usuário.
       let occupancy;
       try {
@@ -138,7 +139,7 @@ const AUDIT_APP = (() => {
         return;
       }
       const occupied = occupancy.find(item => item.environment_id === environment.environmentId);
-      if (occupied) {
+      if (occupied && !(local?.auditId === occupied.audit_id && local.ownerId === owner)) {
         const requests = await AUDIT_REMOTE.listMyParticipation();
         const status = requests.find(item => item.audit_id === occupied.audit_id)?.status;
         if (status === 'APPROVED') return openSharedAudit(occupied.audit_id);
