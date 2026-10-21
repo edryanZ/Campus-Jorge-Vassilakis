@@ -134,7 +134,7 @@ const AUDIT_REMOTE = (() => {
 
   async function findRemoteActive(environmentId) {
     const user = await currentUser();
-    if (!client || !user || !navigator.onLine) return null;
+    if (!client || !user || !navigator.onLine || !(await getAccess())?.canAudit) return null;
     const result = await client.from('audits').select('*').eq('owner_id', user.id)
       .eq('environment_id', environmentId).in('status', ['DRAFT', 'IN_PROGRESS'])
       .order('updated_at', { ascending: false }).limit(1).maybeSingle();
@@ -144,7 +144,7 @@ const AUDIT_REMOTE = (() => {
 
   async function resumeOrCreateActive(proposed) {
     const user = await currentUser();
-    if (!client || !user || !navigator.onLine) return { skipped: true, audit: proposed };
+    if (!client || !user || !navigator.onLine || !(await getAccess())?.canAudit) return { skipped: true, audit: proposed };
     const mutationId = proposed.mutationId || newId('MUTATION');
     let call = await client.rpc('resume_or_create_active_audit', {
       p_id: proposed.auditId, p_environment_id: proposed.environmentId,
@@ -242,7 +242,7 @@ const AUDIT_REMOTE = (() => {
 
   async function syncAuditOnce(record) {
     const user = await currentUser();
-    if (!client || !user || !navigator.onLine || AUDIT_SYNC_CORE.isRecoveryAudit(record)) return { skipped: true };
+    if (!client || !user || !navigator.onLine || AUDIT_SYNC_CORE.isRecoveryAudit(record) || !(await getAccess())?.canAudit) return { skipped: true };
     const audit = structuredClone(record);
     audit.ownerId ||= user.id;
     audit.localOwnerKey = null;
@@ -456,7 +456,17 @@ const AUDIT_REMOTE = (() => {
     if ((await getAccess())?.canAudit) await syncPending();
     return result.data.user;
   }
-  async function signOut() { if (!client) return; const result = await client.auth.signOut(); if (result.error) throw result.error; }
+  async function signOut() {
+    if (!client) return;
+    const user = await sessionUser();
+    const result = await client.auth.signOut();
+    if (result.error) throw result.error;
+    if (user) {
+      verifiedAccess.delete(user.id);
+      try { localStorage.removeItem(`audit-verified-access:${user.id}`); }
+      catch (_error) { /* Armazenamento indisponível. */ }
+    }
+  }
   function onAuthStateChange(callback) {
     if (!client) { queueMicrotask(() => callback('UNCONFIGURED', null)); return () => {}; }
     const sub = client.auth.onAuthStateChange((event, session) => callback(event, session?.user || null));
