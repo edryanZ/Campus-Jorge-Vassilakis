@@ -147,6 +147,14 @@ const AUDIT_REMOTE = (() => {
     };
   }
 
+  async function listActiveOccupancy() {
+    const access = await getAccess();
+    if (!client || !navigator.onLine || !access?.canAudit || access.offline) return [];
+    const result = await client.rpc('list_active_audit_occupancy');
+    if (result.error) throw result.error;
+    return result.data || [];
+  }
+
   async function findRemoteActive(environmentId) {
     const user = await currentUser();
     if (!client || !user || !navigator.onLine || !(await getAccess())?.canAudit) return null;
@@ -512,7 +520,7 @@ const AUDIT_REMOTE = (() => {
   window.addEventListener('online', () => syncPending().catch(error => console.error('[AuditRemote]', error)));
   return Object.freeze({
     configured, client, currentUser, sessionUser, ownerKey, signIn, signOut, requestAccount, getAccess, approveLegacyAdoption, listAccessRequests, reviewAccessRequest, setPublication, getPublishedAudit, onAuthStateChange,
-    findRemoteActive, resumeOrCreateActive, syncAudit, scheduleSync, flushSync, syncPending,
+    findRemoteActive, listActiveOccupancy, resumeOrCreateActive, syncAudit, scheduleSync, flushSync, syncPending,
     pullRemote, listPublic, listAccessibleAudits, preserveConflict
   });
 })();
