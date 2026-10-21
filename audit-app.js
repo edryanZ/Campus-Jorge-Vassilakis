@@ -113,22 +113,16 @@ const AUDIT_APP = (() => {
     if (!local && !owner.startsWith('LOCAL:')) {
       local = await AUDIT_STORAGE.findActive(environment.environmentId, `LOCAL:${await AUDIT_STORAGE.getDeviceId()}`);
     }
-    if (local && !local.ownerId && !owner.startsWith('LOCAL:')) {
-      const accepted = window.confirm(
-        'Existe uma auditoria antiga neste dispositivo sem conta vinculada. Deseja assumir este rascunho na sua conta? ' +
-        'Se escolher Cancelar, ele ficará preservado e não será enviado ao Supabase.'
-      );
-      if (!accepted) return;
-      await AUDIT_REMOTE.approveLegacyAdoption(local);
-    }
+    let ownedRemote = null;
     if (AUDIT_REMOTE.configured && navigator.onLine && !owner.startsWith('LOCAL:')) {
-      const remote = await AUDIT_REMOTE.findRemoteActive(environment.environmentId);
-      if (remote && local && remote.auditId !== local.auditId) {
-        await AUDIT_REMOTE.preserveConflict(local, remote, 'ACTIVE_IDENTITY');
-        saveState.textContent = '⚠ Conflito preservado: existe outro rascunho remoto para este ambiente.';
-      } else if (remote && !local) {
-        await AUDIT_STORAGE.saveAudit(remote, { allowRemoteMerge: true, enforceActiveUniqueness: true });
-        local = remote;
+      ownedRemote = await AUDIT_REMOTE.findRemoteActive(environment.environmentId);
+      if (ownedRemote && local && ownedRemote.auditId !== local.auditId) {
+        await AUDIT_REMOTE.preserveConflict(local, ownedRemote, 'ACTIVE_IDENTITY');
+        window.alert('Existe um rascunho remoto diferente para esta sala. O conflito foi preservado e nenhuma cópia será sobrescrita.');
+        return;
+      } else if (ownedRemote && !local) {
+        await AUDIT_STORAGE.saveAudit(ownedRemote, { allowRemoteMerge: true, enforceActiveUniqueness: true });
+        local = ownedRemote;
       }
     }
     if (AUDIT_REMOTE.configured && navigator.onLine && !owner.startsWith('LOCAL:')) {
@@ -143,7 +137,8 @@ const AUDIT_APP = (() => {
         return;
       }
       const occupied = occupancy.find(item => item.environment_id === environment.environmentId);
-      if (occupied && !(local?.auditId === occupied.audit_id && local.ownerId === owner)) {
+      if (occupied && ownedRemote?.auditId !== occupied.audit_id &&
+          !(local?.auditId === occupied.audit_id && local.ownerId === owner)) {
         const requests = await AUDIT_REMOTE.listMyParticipation();
         const status = requests.find(item => item.audit_id === occupied.audit_id)?.status;
         if (status === 'APPROVED') return openSharedAudit(occupied.audit_id);
@@ -160,6 +155,14 @@ const AUDIT_APP = (() => {
         }
         return;
       }
+    }
+    if (local && !local.ownerId && !owner.startsWith('LOCAL:')) {
+      const accepted = window.confirm(
+        'Existe uma auditoria antiga neste dispositivo sem conta vinculada. Deseja assumir este rascunho na sua conta? ' +
+        'Se escolher Cancelar, ele ficará preservado e não será enviado ao Supabase.'
+      );
+      if (!accepted) return;
+      await AUDIT_REMOTE.approveLegacyAdoption(local);
     }
     if (!local) {
       // Não iniciar rascunho novo offline sem conferir a ocupação global.
