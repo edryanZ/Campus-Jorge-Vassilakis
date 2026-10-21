@@ -154,7 +154,7 @@ const AUDIT_APP = (() => {
       <small class="sync-badge">${syncLabel(item.syncState)}</small>
       ${evidenceStatusMarkup(evidenceByAudit.get(item.auditId))}
       ${item.syncState === 'CONFLICT' ? '<small class="sync-badge">Revisão necessária: versões local e remota foram preservadas</small>' : ''}
-      ${item.publicOnly ? `<button type="button" data-public-id="${escapeHtml(item.auditId)}">Ver resultados públicos</button>` : ''}
+      ${item.publicOnly || item.isPublic ? `<button type="button" data-public-id="${escapeHtml(item.auditId)}">Ver resultados públicos</button>` : ''}
       ${item.status !== AUDIT_DATA.STATUS.COMPLETED && !item.publicOnly &&
         (AUDIT_SYNC_CORE.ownerKey(item) === owner || AUDIT_SYNC_CORE.ownerKey(item) === deviceKey)
           ? `<button type="button" data-resume="${escapeHtml(item.auditId)}">Continuar auditoria</button>` : ''}</article>`).join('')}
@@ -250,7 +250,9 @@ const AUDIT_APP = (() => {
       }
     } catch (error) {
       environmentLabel.textContent = 'Consulta pública';
+      content.replaceChildren();
       notice.textContent = `Não foi possível abrir os resultados publicados: ${error.message || error}`;
+      content.append(notice);
     }
   }
 
