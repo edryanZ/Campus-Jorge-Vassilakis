@@ -90,6 +90,24 @@ const AUDIT_APP = (() => {
         local = remote;
       }
     }
+    if (!local && AUDIT_REMOTE.configured && navigator.onLine && !owner.startsWith('LOCAL:')) {
+      // A ocupação é consultada no servidor, independentemente do responsável.
+      // Não oferecer criação local quando há auditoria ativa de outro usuário.
+      let occupancy;
+      try {
+        occupancy = await AUDIT_REMOTE.listActiveOccupancy();
+      } catch (error) {
+        window.alert('Não foi possível verificar se já existe uma auditoria ativa nesta sala. Por segurança, tente novamente quando a consulta estiver disponível.');
+        return;
+      }
+      const occupied = occupancy.find(item => item.environment_id === environment.environmentId);
+      if (occupied) {
+        window.alert('Já existe uma auditoria em andamento nesta sala. Responsável: ' +
+          (occupied.responsible_name || 'Auditor responsável') +
+          '. Uma nova auditoria não será criada. A participação compartilhada dependerá de autorização.');
+        return;
+      }
+    }
     if (!local) {
       const proposed = createAudit(environment, owner);
       if (AUDIT_REMOTE.configured && navigator.onLine && !owner.startsWith('LOCAL:')) {
