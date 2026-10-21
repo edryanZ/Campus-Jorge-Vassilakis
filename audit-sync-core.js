@@ -67,7 +67,7 @@ const AUDIT_SYNC_CORE = (() => {
 
   function isActiveUniqueViolation(error = {}) {
     const details = `${error.code || ''} ${error.message || ''} ${error.details || ''} ${error.hint || ''}`;
-    return String(error.code) === '23505' && /audits_one_active_per_owner_environment_idx/i.test(details);
+    return String(error.code) === '23505' && /audits_one_active_per_(owner_environment|environment_v162)_idx/i.test(details);
   }
 
   function conflictId(local = {}, remote = {}, reason = 'REVISION') {
