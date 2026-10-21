@@ -1,6 +1,6 @@
 'use strict';
 
-const CACHE_NAME = 'campus-auditoria-v16-2-2';
+const CACHE_NAME = 'campus-auditoria-v16-2-3';
 const LOCAL_ASSETS = [
   './', './index.html', './styles.css', './app.js', './campus-data.js',
   './audit-data.js', './audit-storage.js', './audit-sync-core.js', './audit-remote.js', './audit-app.js',
