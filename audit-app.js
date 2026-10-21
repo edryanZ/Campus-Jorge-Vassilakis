@@ -496,12 +496,12 @@ const AUDIT_APP = (() => {
   }
 
   function renderCenter() {
-    const query = centerSearch.value.trim().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase();
+    const query = centerSearch.value.trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
     const filter = centerFilter.value;
     const rows = centerRecords.filter(item => {
       const env = AUDIT_DATA.getEnvironment(item.environmentId);
       const searchable = [env?.name, env?.blockName, env?.roomNumber, item.environmentId, item.auditId].join(' ')
-        .normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase();
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
       if (query && !searchable.includes(query)) return false;
       if (filter === 'COMPLETED' && item.status !== 'COMPLETED') return false;
       if (filter === 'ACTIVE' && item.status === 'COMPLETED') return false;
