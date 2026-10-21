@@ -567,3 +567,30 @@ body.audit-open { overflow: hidden; }
   .audit-center-results { padding: 8px 14px 20px; }
   .top-actions #auditCenterBtn { display: inline-flex; }
 }
+
+/* v16.1 — correção responsiva testada */
+@media (min-width: 821px) and (max-width: 1100px) {
+  .topbar {
+    height: auto;
+    min-height: 132px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "brand actions" "search search";
+    gap: 8px 12px;
+    padding: 10px 14px;
+  }
+  .brand { grid-area: brand; }
+  .top-actions { grid-area: actions; }
+  .search-box { grid-area: search; width: 100%; }
+  .app-shell { height: calc(100vh - 132px); }
+}
+@media (max-width: 640px) {
+  .topbar {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "brand" "actions" "search";
+    gap: 8px;
+  }
+  .top-actions { flex-wrap: wrap; justify-content: flex-start; width: 100%; }
+  .top-actions button { padding: 8px 10px; }
+  .app-shell { height: auto; min-height: calc(100dvh - 190px); }
+  .audit-center-sheet { width: 100%; max-width: 100%; }
+}
