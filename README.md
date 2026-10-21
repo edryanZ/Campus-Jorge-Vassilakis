@@ -148,3 +148,16 @@ A documentação técnica está dividida por responsabilidade:
 - `docs/ROADMAP-TCC.md`: recursos implementados, preparados e futuros.
 
 Essas regras apoiam o desenvolvimento do TCC sem transformar lacunas de informação ou posições esquemáticas em fatos oficiais.
+
+## V16.1 — consulta pública e solicitação de acesso
+
+Esta versão está na branch de Preview `preview-v16-1-acessos`, não substitui a `main`.
+
+- Visitantes podem consultar **somente resultados concluídos e publicados**, sem entrar.
+- Novos cadastros ficam **pendentes** e não podem criar/sincronizar auditorias.
+- O administrador ativo acessa **Minha conta > Gerenciar acessos**, aprova, recusa ou revoga contas.
+- O administrador pode publicar ou retirar resultados na **Central de Auditorias**, após conclusão e sincronização.
+- Dados privados e evidências não são expostos na consulta pública; registros locais preexistentes são preservados.
+
+Veja o [roteiro de configuração e validação](docs/v16-1-acessos-validacao.md) e a [migração SQL da v16.1](supabase/migrations/20261021_v16_1_access_requests.sql).
+
