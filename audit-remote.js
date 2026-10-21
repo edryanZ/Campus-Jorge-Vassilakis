@@ -49,6 +49,89 @@ const AUDIT_REMOTE = (() => {
     };
   }
 
+  const verifiedAccess = new Map();
+  async function getAccess() {
+    if (!client) return null;
+    const user = await sessionUser();
+    if (!user) return null;
+    const key = `audit-verified-access:${user.id}`;
+    if (!navigator.onLine) {
+      let saved = verifiedAccess.get(user.id);
+      if (!saved) {
+        try { saved = JSON.parse(localStorage.getItem(key) || 'null'); }
+        catch (_error) { saved = null; }
+      }
+      // Offline pode continuar por ate 24h depois da ultima validacao.
+      if (saved?.active && saved?.checkedAt > Date.now() - 86400000)
+        return { ...saved, offline: true };
+      return { active: false, role: null, reviewStatus: 'OFFLINE', canAudit: false, admin: false };
+    }
+    const { data, error } = await client.from('profiles')
+      .select('role,active,display_name,review_status')
+      .eq('user_id', user.id).maybeSingle();
+    if (error) throw error;
+    const result = {
+      userId: user.id, role: data?.role || null, active: Boolean(data?.active),
+      displayName: data?.display_name || '', reviewStatus: data?.review_status || 'PENDING',
+      canAudit: Boolean(data?.active && ['ADMIN', 'AUDITOR'].includes(data.role)),
+      admin: Boolean(data?.active && data.role === 'ADMIN'),
+      checkedAt: Date.now(), offline: false
+    };
+    verifiedAccess.set(user.id, result);
+    try { localStorage.setItem(key, JSON.stringify(result)); } catch (_error) { /* Armazenamento indisponivel. */ }
+    return result;
+  }
+
+  async function requestAccount(displayName, email, password) {
+    if (!client) throw new Error('Cadastro indisponível: Supabase não configurado.');
+    const { data, error } = await client.auth.signUp({
+      email: String(email).trim(), password,
+      options: { data: { display_name: String(displayName).trim().slice(0, 120) } }
+    });
+    if (error) throw error;
+    return data;
+  }
+
+  async function listAccessRequests() {
+    const access = await getAccess();
+    if (!access?.admin || access.offline) throw new Error('Apenas administradores conectados podem consultar solicitações.');
+    const { data, error } = await client.rpc('admin_list_access_requests');
+    if (error) throw error;
+    return data || [];
+  }
+
+  async function reviewAccessRequest(userId, approve) {
+    const access = await getAccess();
+    if (!access?.admin || access.offline) throw new Error('Aprovação requer administrador conectado.');
+    const { error } = await client.rpc('admin_review_access_request', {
+      p_user_id: userId, p_approve: Boolean(approve)
+    });
+    if (error) throw error;
+  }
+
+  async function setPublication(auditId, publish) {
+    const access = await getAccess();
+    if (!access?.admin || access.offline) throw new Error('Somente administrador conectado pode publicar resultados.');
+    const { error } = await client.rpc('authorize_audit_publication', {
+      p_id: auditId, p_publish: Boolean(publish)
+    });
+    if (error) throw error;
+  }
+
+  async function getPublishedAudit(auditId) {
+    if (!client || !navigator.onLine) throw new Error('Consulta pública requer conexão.');
+    const { data, error } = await client.from('published_audits')
+      .select('id,environment_id,status,public_payload,completed_at,updated_at,server_revision')
+      .eq('id', auditId).maybeSingle();
+    if (error) throw error;
+    if (!data) throw new Error('Resultado não publicado ou indisponível.');
+    return {
+      auditId: data.id, environmentId: data.environment_id, status: data.status,
+      data: data.public_payload?.data || {}, summary: data.public_payload?.summary || {},
+      completedAt: data.completed_at, updatedAt: data.updated_at, publicOnly: true
+    };
+  }
+
   async function findRemoteActive(environmentId) {
     const user = await currentUser();
     if (!client || !user || !navigator.onLine) return null;
@@ -221,6 +304,8 @@ const AUDIT_REMOTE = (() => {
   }
 
   async function syncAudit(record) {
+    const access = await getAccess();
+    if (!access?.canAudit) return { skipped: true, reason: 'UNAUTHORIZED' };
     const user = await sessionUser();
     const key = AUDIT_SYNC_CORE.activeKey(user?.id || AUDIT_SYNC_CORE.ownerKey(record), record.environmentId) || lockKey(record);
     const previous = locks.get(key) || Promise.resolve();
@@ -267,7 +352,7 @@ const AUDIT_REMOTE = (() => {
 
   async function pullRemote() {
     const user = await currentUser();
-    if (!client || !user || !navigator.onLine) return { skipped: true };
+    if (!client || !user || !navigator.onLine || !(await getAccess())?.canAudit) return { skipped: true };
     const result = await client.from('audits').select('*').order('updated_at', { ascending: false });
     if (result.error) throw result.error;
     let conflicts = 0;
@@ -298,10 +383,10 @@ const AUDIT_REMOTE = (() => {
     if (!client || !navigator.onLine) return { items: [], offline: !navigator.onLine, authenticated: false };
     const user = await currentUser();
     const items = [];
-    if (user) {
+    if (user && (await getAccess())?.canAudit) {
       // Nunca filtrar owner_id no cliente: RLS permite ao ADMIN consultar os registros autorizados de outros auditores.
       const owned = await client.from('audits')
-        .select('id,environment_id,status,updated_at,completed_at,server_revision,owner_id,sync_complete')
+        .select('id,environment_id,status,updated_at,completed_at,server_revision,owner_id,sync_complete,is_public')
         .order('updated_at', { ascending: false }).limit(1000);
       if (owned.error) throw owned.error;
       for (const row of owned.data || []) {
@@ -309,6 +394,7 @@ const AUDIT_REMOTE = (() => {
           auditId: row.id, environmentId: row.environment_id, status: row.status,
           updatedAt: row.updated_at, completedAt: row.completed_at,
           serverRevision: row.server_revision, ownerId: row.owner_id,
+          isPublic: Boolean(row.is_public), syncComplete: Boolean(row.sync_complete),
           syncState: row.sync_complete ? 'SYNCED' : 'PENDING',
           source: 'REMOTE', remoteOnly: true
         });
@@ -339,7 +425,7 @@ const AUDIT_REMOTE = (() => {
   }
 
   async function syncPending() {
-    if (syncing || !client || !navigator.onLine || !(await currentUser())) return { skipped: true };
+    if (syncing || !client || !navigator.onLine || !(await getAccess())?.canAudit) return { skipped: true };
     syncing = true;
     let synced = 0; let failed = 0; let pendingEvidence = 0;
     dispatch('audit:sync-start');
@@ -367,7 +453,7 @@ const AUDIT_REMOTE = (() => {
     if (!client) throw new Error('Supabase ainda não foi configurado.');
     const result = await client.auth.signInWithPassword({ email, password });
     if (result.error) throw result.error;
-    await syncPending();
+    if ((await getAccess())?.canAudit) await syncPending();
     return result.data.user;
   }
   async function signOut() { if (!client) return; const result = await client.auth.signOut(); if (result.error) throw result.error; }
@@ -380,7 +466,7 @@ const AUDIT_REMOTE = (() => {
 
   window.addEventListener('online', () => syncPending().catch(error => console.error('[AuditRemote]', error)));
   return Object.freeze({
-    configured, client, currentUser, sessionUser, ownerKey, signIn, signOut, onAuthStateChange,
+    configured, client, currentUser, sessionUser, ownerKey, signIn, signOut, requestAccount, getAccess, listAccessRequests, reviewAccessRequest, setPublication, getPublishedAudit, onAuthStateChange,
     findRemoteActive, resumeOrCreateActive, syncAudit, scheduleSync, flushSync, syncPending,
     pullRemote, listPublic, listAccessibleAudits, preserveConflict
   });
