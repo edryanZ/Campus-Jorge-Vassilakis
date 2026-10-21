@@ -155,6 +155,54 @@ const AUDIT_REMOTE = (() => {
     return result.data || [];
   }
 
+  async function requestAuditParticipation(auditId) {
+    if (!(await getAccess())?.canAudit || !navigator.onLine)
+      throw new Error('É necessário estar conectado com conta de auditor autorizada.');
+    const { data, error } = await client.rpc('request_audit_participation', { p_audit_id: auditId });
+    if (error) throw error;
+    return data;
+  }
+
+  async function listMyParticipation() {
+    if (!(await getAccess())?.canAudit || !navigator.onLine) return [];
+    const { data, error } = await client.rpc('list_my_audit_participation');
+    if (error) throw error;
+    return data || [];
+  }
+
+  async function listAuditParticipationRequests() {
+    const access = await getAccess();
+    if (!access?.admin || access.offline || !navigator.onLine)
+      throw new Error('A consulta de solicitações exige administrador conectado.');
+    const { data, error } = await client.rpc('admin_list_audit_participation_requests');
+    if (error) throw error;
+    return data || [];
+  }
+
+  async function reviewAuditParticipation(auditId, requesterId, approve) {
+    const access = await getAccess();
+    if (!access?.admin || access.offline || !navigator.onLine)
+      throw new Error('A decisão exige administrador conectado.');
+    const { data, error } = await client.rpc('admin_review_audit_participation', {
+      p_audit_id: auditId, p_requester_id: requesterId, p_approve: Boolean(approve)
+    });
+    if (error) throw error;
+    return data;
+  }
+
+  async function getSharedAudit(auditId) {
+    if (!(await getAccess())?.canAudit || !navigator.onLine)
+      throw new Error('É necessário estar conectado para continuar a auditoria compartilhada.');
+    const { data, error } = await client.rpc('get_shared_audit', { p_audit_id: auditId });
+    if (error) throw error;
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row) throw new Error('A auditoria compartilhada não está disponível.');
+    const user = await currentUser();
+    const record = remoteToLocal(row);
+    if (record.ownerId !== user?.id) record.collaborationEditorId = user.id;
+    return record;
+  }
+
   async function findRemoteActive(environmentId) {
     const user = await currentUser();
     if (!client || !user || !navigator.onLine || !(await getAccess())?.canAudit) return null;
@@ -263,13 +311,49 @@ const AUDIT_REMOTE = (() => {
     return conflict;
   }
 
+  async function syncSharedAuditOnce(record, user) {
+    if (!record?.collaborationEditorId || record.collaborationEditorId !== user.id)
+      return { skipped: true, reason: 'OTHER_OWNER' };
+    const audit = structuredClone(record);
+    audit.mutationId ||= newId('MUTATION');
+    const { data, error } = await client.rpc('sync_shared_audit', {
+      p_id: audit.auditId,
+      p_private_payload: audit,
+      p_public_payload: AUDIT_SYNC_CORE.publicPayload(audit),
+      p_status: audit.status,
+      p_expected_revision: Number(audit.serverRevision || 0),
+      p_mutation_id: audit.mutationId
+    });
+    if (error) {
+      audit.syncState = String(error.code) === '40001' ? 'CONFLICT' : 'ERROR';
+      audit.syncError = error.message;
+      await AUDIT_STORAGE.saveAudit(audit, { allowRemoteMerge: true });
+      if (String(error.code) === '40001') {
+        try {
+          const remote = await getSharedAudit(audit.auditId);
+          await preserveConflict(audit, remote, 'SHARED_REVISION_40001');
+        } catch (_error) { /* O rascunho local permanece intacto. */ }
+      }
+      throw error;
+    }
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row?.id || !row.server_revision)
+      throw new Error('O servidor não confirmou a edição compartilhada.');
+    const synced = { ...remoteToLocal(row), collaborationEditorId: user.id };
+    await AUDIT_STORAGE.saveAudit(synced, { allowRemoteMerge: true });
+    dispatch('audit:sync-state', { auditId: synced.auditId, state: synced.syncState });
+    return { synced: Boolean(row.sync_complete), audit: synced };
+  }
+
   async function syncAuditOnce(record) {
     const user = await currentUser();
     if (!client || !user || !navigator.onLine || AUDIT_SYNC_CORE.isRecoveryAudit(record) || !(await getAccess())?.canAudit) return { skipped: true };
     // Impede que um usuário sincronize registros privados pertencentes a outra conta
     // no mesmo dispositivo. Registros antigos sem dono continuam preservados.
+    if (record.collaborationEditorId && record.collaborationEditorId !== user.id)
+      return { skipped: true, reason: 'OTHER_EDITOR' };
     if (record.ownerId && record.ownerId !== user.id)
-      return { skipped: true, reason: 'OTHER_OWNER' };
+      return syncSharedAuditOnce(record, user);
     if (record.localOwnerKey && record.localOwnerKey !== `LOCAL:${await AUDIT_STORAGE.getDeviceId()}`)
       return { skipped: true, reason: 'OTHER_DEVICE' };
     if (!record.ownerId && approvedLocalAdoptions.get(record.auditId) !== user.id)
@@ -432,6 +516,25 @@ const AUDIT_REMOTE = (() => {
         });
       }
     }
+    // Metadados mínimos de ocupação, sem expor o payload privado de outro auditor.
+    if (user && (await getAccess())?.canAudit) {
+      const [occupancy, participation] = await Promise.all([listActiveOccupancy(), listMyParticipation()]);
+      const byAudit = new Map(participation.map(item => [item.audit_id, item.status]));
+      for (const slot of occupancy) {
+        const existing = items.find(item => item.auditId === slot.audit_id);
+        if (existing) {
+          existing.responsibleName = slot.responsible_name;
+          continue;
+        }
+        items.push({
+          auditId: slot.audit_id, environmentId: slot.environment_id,
+          status: slot.status, updatedAt: slot.updated_at,
+          responsibleName: slot.responsible_name,
+          participationStatus: byAudit.get(slot.audit_id) || null,
+          source: 'OCCUPANCY', occupancyOnly: true, remoteOnly: true, syncState: 'SYNCED'
+        });
+      }
+    }
     const published = await client.from('published_audits')
       .select('id,environment_id,status,updated_at,completed_at,server_revision')
       .order('updated_at', { ascending: false }).limit(1000);
@@ -469,7 +572,8 @@ const AUDIT_REMOTE = (() => {
           attempts.delete(id);
           const record = await AUDIT_STORAGE.getAudit(id);
           const user = await sessionUser();
-          if (!record || (record.ownerId && record.ownerId !== user?.id) ||
+          if (!record || (record.collaborationEditorId && record.collaborationEditorId !== user?.id) ||
+              (record.ownerId && record.ownerId !== user?.id && record.collaborationEditorId !== user?.id) ||
               (!record.ownerId && approvedLocalAdoptions.get(record.auditId) !== user?.id) ||
               (record.localOwnerKey && record.localOwnerKey !== `LOCAL:${await AUDIT_STORAGE.getDeviceId()}`))
             continue;
@@ -520,7 +624,7 @@ const AUDIT_REMOTE = (() => {
   window.addEventListener('online', () => syncPending().catch(error => console.error('[AuditRemote]', error)));
   return Object.freeze({
     configured, client, currentUser, sessionUser, ownerKey, signIn, signOut, requestAccount, getAccess, approveLegacyAdoption, listAccessRequests, reviewAccessRequest, setPublication, getPublishedAudit, onAuthStateChange,
-    findRemoteActive, listActiveOccupancy, resumeOrCreateActive, syncAudit, scheduleSync, flushSync, syncPending,
+    findRemoteActive, listActiveOccupancy, requestAuditParticipation, listMyParticipation, listAuditParticipationRequests, reviewAuditParticipation, getSharedAudit, resumeOrCreateActive, syncAudit, scheduleSync, flushSync, syncPending,
     pullRemote, listPublic, listAccessibleAudits, preserveConflict
   });
 })();
