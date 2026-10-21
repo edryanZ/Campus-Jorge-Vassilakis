@@ -680,13 +680,17 @@ const AUDIT_APP = (() => {
     button.disabled = true;
     authStatus.textContent = 'Enviando solicitação…';
     try {
-      await AUDIT_REMOTE.requestAccount(values.get('displayName'), values.get('email'), values.get('password'));
+      const result = await AUDIT_REMOTE.requestAccount(values.get('displayName'), values.get('email'), values.get('password'));
       signupForm.reset();
       signupForm.hidden = true;
-      authForm.hidden = false;
-      showSignupButton.hidden = false;
+      if (result?.session?.user) {
+        await setAuthState(result.session.user);
+      } else {
+        authForm.hidden = false;
+        showSignupButton.hidden = false;
+      }
       authStatus.className = 'auth-status is-success';
-      authStatus.textContent = 'Solicitação enviada. Se receber um e-mail de confirmação, confirme o endereço. Após isso, aguarde a aprovação do administrador.';
+      authStatus.textContent = 'Solicitação registrada. Se receber um e-mail de confirmação, confirme o endereço. A autorização para auditar depende de aprovação do administrador.';
     } catch (error) {
       authStatus.className = 'auth-status is-error';
       authStatus.textContent = `Não foi possível solicitar a conta: ${error.message || error}`;
@@ -835,12 +839,13 @@ const AUDIT_APP = (() => {
       catch (error) { console.warn('[AuditCenter] Autorização indisponível:', error); }
       centerIsAdmin = Boolean(access?.admin);
       const owner = access?.canAudit ? await AUDIT_REMOTE.ownerKey() : null;
+      const deviceKey = access?.canAudit ? `LOCAL:${await AUDIT_STORAGE.getDeviceId()}` : null;
       const all = access?.canAudit ? await AUDIT_STORAGE.listAudits() : [];
       const localRecords = all.filter(item => {
         if (AUDIT_SYNC_CORE.isRecoveryAudit(item)) return false;
+        if (access.admin) return true;
         const recordOwner = AUDIT_SYNC_CORE.ownerKey(item);
-        return !recordOwner || recordOwner === owner ||
-          (recordOwner.startsWith('LOCAL:') && item.ownerId == null);
+        return recordOwner === owner || (recordOwner === deviceKey && item.ownerId == null);
       });
       const merged = new Map(localRecords.map(item => [item.auditId, item]));
       centerLoadNote = 'Somente registros locais (sem conexão).';
