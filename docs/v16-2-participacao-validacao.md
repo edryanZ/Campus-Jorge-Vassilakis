@@ -37,3 +37,7 @@ A tabela de solicitações tem RLS habilitada **sem política de acesso direto, 
 - Auditorias compartilhadas requerem conexão para abertura e autorização; edição offline compartilhada não está validada.
 - Inclusão de evidências por colaboradores está bloqueada até revisão do Storage e das permissões de metadados.
 - A migração do Supabase permanece aplicada mesmo que a branch de testes seja descartada; qualquer reversão exige plano próprio e validação, sem remoção de dados.
+
+## Envio para prévia
+
+Em 2026-10-22 foi solicitado novo envio do commit pela branch de testes para acionar a integração GitHub → Vercel. Este registro é apenas documental e não altera a aplicação nem promove a produção. A implantação deve ser confirmada pelo SHA publicado na Vercel antes de qualquer promoção para o domínio principal.
