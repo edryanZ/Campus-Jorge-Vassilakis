@@ -580,8 +580,11 @@ const AUDIT_APP = (() => {
       });
       audit.evidenceIds.push(evidenceId);
       markDirty();
-      await scheduleSave(true);
-      saveState.textContent = '✓ Evidência salva neste dispositivo';
+      const saved = await scheduleSave(true);
+      if (saved?.error) throw saved.error;
+      saveState.textContent = saved?.superseded
+        ? 'Fotografia armazenada · confirmação do vínculo ainda pendente'
+        : '✓ Evidência salva neste dispositivo';
     } catch (error) {
       showLocalSaveError(error);
       window.alert('A fotografia não foi completamente salva. Não feche a auditoria até tentar novamente.');
