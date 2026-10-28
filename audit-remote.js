@@ -327,7 +327,7 @@ const AUDIT_REMOTE = (() => {
     if (error) {
       audit.syncState = String(error.code) === '40001' ? 'CONFLICT' : 'ERROR';
       audit.syncError = error.message;
-      await AUDIT_STORAGE.saveAudit(audit, { allowRemoteMerge: true });
+      await AUDIT_STORAGE.saveRemoteAcknowledgment(audit, audit.mutationId);
       if (String(error.code) === '40001') {
         try {
           const remote = await getSharedAudit(audit.auditId);
@@ -340,9 +340,9 @@ const AUDIT_REMOTE = (() => {
     if (!row?.id || !row.server_revision)
       throw new Error('O servidor não confirmou a edição compartilhada.');
     const synced = { ...remoteToLocal(row), collaborationEditorId: user.id };
-    await AUDIT_STORAGE.saveAudit(synced, { allowRemoteMerge: true });
-    dispatch('audit:sync-state', { auditId: synced.auditId, state: synced.syncState });
-    return { synced: Boolean(row.sync_complete), audit: synced };
+    const saved = await AUDIT_STORAGE.saveRemoteAcknowledgment(synced, audit.mutationId);
+    dispatch('audit:sync-state', { auditId: saved.audit.auditId, state: saved.audit.syncState });
+    return { synced: Boolean(row.sync_complete) && !saved.superseded, audit: saved.audit };
   }
 
   async function syncAuditOnce(record) {
@@ -363,7 +363,10 @@ const AUDIT_REMOTE = (() => {
     audit.localOwnerKey = null;
     audit.mutationId ||= newId('MUTATION');
     audit.syncState = 'PENDING'; audit.syncError = null;
-    await AUDIT_STORAGE.saveAudit(audit, { allowRemoteMerge: true, enforceActiveUniqueness: true });
+    // Não gravar um snapshot antigo por cima de uma edição mais nova.
+    // A preparação usa a mesma transação atômica da confirmação remota.
+    const prepared = await AUDIT_STORAGE.saveRemoteAcknowledgment(audit, record.mutationId);
+    if (prepared.superseded) return { skipped: true, reason: 'NEW_LOCAL_EDIT' };
     approvedLocalAdoptions.delete(audit.auditId);
     const call = await client.rpc('sync_audit', {
       p_id: audit.auditId, p_environment_id: audit.environmentId, p_status: audit.status,
@@ -377,7 +380,7 @@ const AUDIT_REMOTE = (() => {
       const isDuplicate = AUDIT_SYNC_CORE.isActiveUniqueViolation(call.error);
       audit.syncState = isRevision || isDuplicate ? 'CONFLICT' : 'ERROR';
       audit.syncError = call.error.message;
-      await AUDIT_STORAGE.saveAudit(audit, { allowRemoteMerge: true });
+      await AUDIT_STORAGE.saveRemoteAcknowledgment(audit, audit.mutationId);
       if (isRevision || isDuplicate) {
         const remote = isDuplicate ? await findRemoteActive(audit.environmentId) : await fetchRemoteById(audit.auditId);
         if (remote) await preserveConflict(audit, remote, isDuplicate ? 'ACTIVE_IDENTITY_23505' : 'REVISION_40001');
@@ -387,26 +390,26 @@ const AUDIT_REMOTE = (() => {
     let row = Array.isArray(call.data) ? call.data[0] : call.data;
     if (!row?.id || !row.server_revision) throw new Error('O Supabase não confirmou a revisão salva.');
     audit.serverRevision = row.server_revision;
-    await AUDIT_STORAGE.saveAudit(audit, { allowRemoteMerge: true });
+    await AUDIT_STORAGE.saveRemoteAcknowledgment(audit, audit.mutationId);
     const evidence = await syncEvidenceForAudit(audit.auditId, user.id);
     const state = AUDIT_SYNC_CORE.aggregateState(true, evidence);
     const summary = AUDIT_SYNC_CORE.evidenceSummary(evidence);
     if (state !== 'SYNCED') {
       audit.syncState = state;
       audit.syncError = state === 'ERROR' ? 'Há evidência com erro de sincronização.' : 'Há evidência aguardando sincronização.';
-      await AUDIT_STORAGE.saveAudit(audit, { allowRemoteMerge: true });
-      dispatch('audit:sync-state', { auditId: audit.auditId, state, evidence: summary });
-      return { synced: false, audit, evidence: summary };
+      const saved = await AUDIT_STORAGE.saveRemoteAcknowledgment(audit, audit.mutationId);
+      dispatch('audit:sync-state', { auditId: saved.audit.auditId, state: saved.audit.syncState, evidence: summary });
+      return { synced: false, audit: saved.audit, evidence: summary };
     }
     const final = await client.rpc('finalize_audit_sync', { p_id: audit.auditId, p_expected_revision: Number(audit.serverRevision), p_mutation_id: audit.mutationId });
     if (final.error) throw final.error;
     row = Array.isArray(final.data) ? final.data[0] : final.data;
     if (!row?.sync_complete) throw new Error('O Supabase não confirmou todos os dados e evidências.');
     const syncedAudit = remoteToLocal(row);
-    await AUDIT_STORAGE.saveAudit(syncedAudit, { allowRemoteMerge: true });
+    const saved = await AUDIT_STORAGE.saveRemoteAcknowledgment(syncedAudit, audit.mutationId);
     attempts.delete(audit.auditId);
-    dispatch('audit:sync-state', { auditId: syncedAudit.auditId, state: 'SYNCED', evidence: summary });
-    return { synced: true, audit: syncedAudit, evidence: summary };
+    dispatch('audit:sync-state', { auditId: saved.audit.auditId, state: saved.audit.syncState, evidence: summary });
+    return { synced: !saved.superseded, audit: saved.audit, evidence: summary };
   }
 
   async function fetchRemoteById(auditId) {
