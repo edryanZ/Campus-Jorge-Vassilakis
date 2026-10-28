@@ -54,8 +54,15 @@ const AUDIT_STORAGE = (() => {
     return new Promise((resolve, reject) => {
       const tx = db.transaction(storeName, mode);
       const request = operation(tx.objectStore(storeName));
-      request.onsuccess = () => resolve(request.result);
+      // Para escritas, sucesso do request não significa transação concluída:
+      // só confirmar o salvamento após o commit do IndexedDB.
+      let result;
+      request.onsuccess = () => {
+        result = request.result;
+        if (mode === 'readonly') resolve(result);
+      };
       request.onerror = () => reject(request.error);
+      if (mode !== 'readonly') tx.oncomplete = () => resolve(result);
       tx.onabort = () => reject(tx.error || new Error('Transação local cancelada.'));
     });
   }
