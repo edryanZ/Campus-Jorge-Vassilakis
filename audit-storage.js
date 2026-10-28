@@ -91,6 +91,10 @@ const AUDIT_STORAGE = (() => {
       existingRequest.onerror = () => { failure = existingRequest.error; tx.abort(); };
       existingRequest.onsuccess = () => {
         const existing = existingRequest.result;
+        // A revisão confirmada pelo servidor nunca pode diminuir por causa
+        // de um formulário local aberto antes da sincronização.
+        if (existing && !options.allowRemoteMerge)
+          audit.serverRevision = Math.max(Number(audit.serverRevision || 0), Number(existing.serverRevision || 0));
         if (existing?.status === AUDIT_DATA.STATUS.COMPLETED && audit.status !== AUDIT_DATA.STATUS.COMPLETED && !options.allowRemoteMerge) {
           failure = new Error('Uma auditoria concluída não pode voltar para rascunho.'); tx.abort(); return;
         }
@@ -124,6 +128,37 @@ const AUDIT_STORAGE = (() => {
   const listEvidence = () => requestResult(STORES.EVIDENCE, 'readonly', store => store.getAll());
   const saveEvidence = evidence => requestResult(STORES.EVIDENCE, 'readwrite', store => store.put(structuredClone(evidence)));
   const getMeta = key => requestResult(STORES.META, 'readonly', store => store.get(key));
+  // Confirmações remotas não podem apagar alterações locais posteriores.
+  // A comparação acontece DENTRO da mesma transação IndexedDB.
+  async function saveRemoteAcknowledgment(record, sentMutationId) {
+    const remote = normalizeAudit(record);
+    const db = await openDatabase();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORES.AUDITS, 'readwrite');
+      const store = tx.objectStore(STORES.AUDITS);
+      let result, superseded = false, failure = null;
+      const read = store.get(remote.auditId);
+      read.onerror = () => { failure = read.error; tx.abort(); };
+      read.onsuccess = () => {
+        const current = read.result;
+        superseded = Boolean(current && current.mutationId !== sentMutationId);
+        result = superseded ? {
+          ...current,
+          ownerId: current.ownerId || remote.ownerId,
+          localOwnerKey: current.ownerId || remote.ownerId ? null : current.localOwnerKey,
+          serverRevision: Math.max(Number(current.serverRevision || 0), Number(remote.serverRevision || 0)),
+          lastSyncedAt: remote.lastSyncedAt || current.lastSyncedAt,
+          syncState: current.syncState === 'CONFLICT' ? 'CONFLICT' : 'PENDING',
+          syncError: current.syncState === 'CONFLICT' ? current.syncError : null
+        } : remote;
+        const put = store.put(result);
+        put.onerror = () => { failure = put.error; tx.abort(); };
+      };
+      tx.oncomplete = () => resolve({ audit: result, superseded });
+      tx.onabort = () => reject(failure || tx.error || new Error('A confirmação remota não foi persistida.'));
+    });
+  }
+
   const setMeta = (key, value) => requestResult(STORES.META, 'readwrite', store => store.put({ key, value }));
   const getConflict = conflictId => requestResult(STORES.CONFLICTS, 'readonly', store => store.get(conflictId));
   const listConflicts = () => requestResult(STORES.CONFLICTS, 'readonly', store => store.getAll());
@@ -200,7 +235,7 @@ const AUDIT_STORAGE = (() => {
   }
 
   return Object.freeze({
-    openDatabase, saveAudit, getAudit, listAudits, listByEnvironment, findActive, listRecoveries,
+    openDatabase, saveAudit, saveRemoteAcknowledgment, getAudit, listAudits, listByEnvironment, findActive, listRecoveries,
     saveEvidence, getEvidence, listEvidence, listEvidenceByAudit, listPending,
     saveConflict, getConflict, listConflicts, evidenceManifest,
     getDeviceId, exportAll, evidenceSummary
