@@ -12,6 +12,7 @@ const AUDIT_APP = (() => {
   let saveTimer = null;
   let previouslyFocusedElement = null;
   let isDirty = false;
+  let editGeneration = 0;
   const openLocks = new Map();
 
   const uid = prefix => `${prefix}-${crypto.randomUUID?.() || `${Date.now()}-${crypto.getRandomValues(new Uint32Array(1))[0].toString(16)}`}`;
@@ -589,18 +590,30 @@ const AUDIT_APP = (() => {
     if (!isDirty) return { skipped: true };
     audit.updatedAt = now();
     audit.currentStep = stepIndex;
-    await AUDIT_STORAGE.saveAudit(audit, { enforceActiveUniqueness: true });
+    // Guarde uma cópia e nunca confirme um salvamento antigo se o usuário
+    // continuar digitando enquanto o IndexedDB trabalha.
+    const snapshot = structuredClone(audit);
+    const savedGeneration = editGeneration;
+    await AUDIT_STORAGE.saveAudit(snapshot, { enforceActiveUniqueness: true });
+    if (!audit || audit.auditId !== snapshot.auditId) return { superseded: true };
+    if (editGeneration !== savedGeneration) {
+      scheduleSave();
+      return { superseded: true };
+    }
     isDirty = false;
     saveState.textContent = AUDIT_REMOTE.configured
       ? (navigator.onLine ? '✓ Salvo localmente · aguardando sincronização' : '✓ Salvo localmente · aguardando internet')
       : '✓ Salvo localmente · Supabase não configurado';
     if (scheduleRemote && AUDIT_REMOTE.configured && navigator.onLine) {
-      const scheduledAuditId = audit.auditId;
-      AUDIT_REMOTE.scheduleSync(audit).then(result => {
-        if (result?.synced && audit?.auditId === result.audit.auditId) {
+      const scheduledAuditId = snapshot.auditId;
+      AUDIT_REMOTE.scheduleSync(snapshot).then(result => {
+        // Uma resposta do servidor pode chegar depois de outra edição.
+        // Nunca substituir o formulário atual por uma revisão antiga.
+        if (!audit || audit.auditId !== scheduledAuditId || editGeneration !== savedGeneration) return;
+        if (result?.synced && result.audit?.auditId === scheduledAuditId) {
           audit = result.audit;
           saveState.textContent = `✓ Sincronizado com o Supabase · ${new Date(audit.lastSyncedAt).toLocaleTimeString('pt-BR')}`;
-        } else if (result?.evidence && audit?.auditId === result.audit.auditId) {
+        } else if (result?.evidence && result.audit?.auditId === scheduledAuditId) {
           saveState.textContent = `⚠ Dados salvos · evidências: ${result.evidence.synced} sincronizada(s), ${result.evidence.pending} pendente(s), ${result.evidence.errors} com erro`;
         } else if (result?.error && audit?.auditId === scheduledAuditId) {
           saveState.textContent = `⚠ Salvo localmente · erro de sincronização: ${result.error.message || 'tente novamente'}`;
@@ -663,6 +676,7 @@ const AUDIT_APP = (() => {
 
   function markDirty() {
     isDirty = true;
+    editGeneration += 1;
     audit.mutationId = uid('MUTATION');
     audit.syncState = AUDIT_REMOTE.configured ? 'PENDING' : 'LOCAL_ONLY';
     audit.syncError = null;
