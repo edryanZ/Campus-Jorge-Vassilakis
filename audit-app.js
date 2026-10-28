@@ -414,7 +414,12 @@ const AUDIT_APP = (() => {
 
   async function closeModal() {
     if (audit) {
-      await saveNow({ scheduleRemote: false });
+      try {
+        await saveNow({ scheduleRemote: false });
+      } catch (error) {
+        showLocalSaveError(error);
+        return; // Não fechar com mudanças ainda não gravadas.
+      }
       if (AUDIT_REMOTE.configured && navigator.onLine) AUDIT_REMOTE.flushSync(audit.auditId).catch(error => console.warn('[AuditRemote]', error));
     }
     modal.hidden = true;
@@ -567,22 +572,37 @@ const AUDIT_APP = (() => {
       event.target.value = '';
       return;
     }
-    await AUDIT_STORAGE.saveEvidence({
-      evidenceId, auditId: audit.auditId, nonConformityId: null,
-      description: file.name, mimeType: file.type, size: file.size,
-      createdAt: now(), blob: file, syncState: AUDIT_REMOTE.configured ? 'PENDING' : 'LOCAL_ONLY', syncError: null
-    });
-    audit.evidenceIds.push(evidenceId);
-    markDirty();
-    scheduleSave(true);
-    saveState.textContent = '✓ Evidência salva neste dispositivo';
+    try {
+      await AUDIT_STORAGE.saveEvidence({
+        evidenceId, auditId: audit.auditId, nonConformityId: null,
+        description: file.name, mimeType: file.type, size: file.size,
+        createdAt: now(), blob: file, syncState: AUDIT_REMOTE.configured ? 'PENDING' : 'LOCAL_ONLY', syncError: null
+      });
+      audit.evidenceIds.push(evidenceId);
+      markDirty();
+      await scheduleSave(true);
+      saveState.textContent = '✓ Evidência salva neste dispositivo';
+    } catch (error) {
+      showLocalSaveError(error);
+      window.alert('A fotografia não foi completamente salva. Não feche a auditoria até tentar novamente.');
+    }
+  }
+
+  function showLocalSaveError(error) {
+    saveState.textContent = `⚠ Falha ao salvar no dispositivo: ${error?.message || 'verifique o armazenamento e tente novamente'}`;
+    console.error('[AuditLocalSave]', error);
   }
 
   function scheduleSave(immediate = false) {
     clearTimeout(saveTimer);
     saveState.textContent = 'Salvando…';
-    if (immediate) return saveNow();
-    saveTimer = setTimeout(saveNow, 350);
+    if (immediate) return saveNow().catch(error => {
+      showLocalSaveError(error);
+      return { error };
+    });
+    saveTimer = setTimeout(() => {
+      saveNow().catch(showLocalSaveError);
+    }, 350);
   }
 
   async function saveNow({ scheduleRemote = true } = {}) {
@@ -630,11 +650,22 @@ const AUDIT_APP = (() => {
       renderStep();
       return;
     }
+    const previousStatus = audit.status;
+    const previousCompletedAt = audit.completedAt;
     audit.status = AUDIT_DATA.STATUS.COMPLETED;
     audit.completedAt = now();
     audit.updatedAt = audit.completedAt;
     markDirty();
-    await AUDIT_STORAGE.saveAudit(audit);
+    try {
+      await AUDIT_STORAGE.saveAudit(audit);
+    } catch (error) {
+      audit.status = previousStatus;
+      audit.completedAt = previousCompletedAt;
+      isDirty = true;
+      showLocalSaveError(error);
+      window.alert('Não foi possível gravar a conclusão neste dispositivo. A auditoria não será fechada.');
+      return;
+    }
     isDirty = false;
     saveState.textContent = '✓ Auditoria concluída e salva localmente · aguardando sincronização';
     let remoteMessage = 'O registro permanece neste dispositivo até que a sincronização seja confirmada.';
