@@ -13,6 +13,7 @@ const AUDIT_APP = (() => {
   let previouslyFocusedElement = null;
   let isDirty = false;
   let editGeneration = 0;
+  let editorUserId = null;
   let localSaveQueue = Promise.resolve();
   const openLocks = new Map();
 
@@ -101,6 +102,7 @@ const AUDIT_APP = (() => {
     if (!environment) throw new Error('Ambiente da auditoria não encontrado no mapa.');
     await AUDIT_STORAGE.saveAudit(remote, { allowRemoteMerge: true, enforceActiveUniqueness: true });
     audit = remote;
+    editorUserId = await AUDIT_REMOTE.ownerKey();
     isDirty = false;
     stepIndex = Math.min(audit.currentStep || 0, AUDIT_DATA.STEPS.length - 1);
     openModal();
@@ -200,6 +202,7 @@ const AUDIT_APP = (() => {
       }
     }
     audit = local;
+    editorUserId = owner;
     isDirty = false;
     stepIndex = Math.min(audit.currentStep || 0, AUDIT_DATA.STEPS.length - 1);
     if (audit.status === AUDIT_DATA.STATUS.DRAFT || !audit.startedAt) {
@@ -244,6 +247,7 @@ const AUDIT_APP = (() => {
       .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
     const evidenceByAudit = new Map(await Promise.all(localItems.map(async item => [item.auditId, await AUDIT_STORAGE.evidenceSummary(item.auditId)])));
     audit = null;
+    editorUserId = null;
     openModal();
     title.textContent = 'Histórico de auditorias';
     environmentLabel.textContent = `${environment.blockName} · ${environment.roomNumber ? `Sala ${environment.roomNumber}` : environment.name}`;
@@ -277,6 +281,7 @@ const AUDIT_APP = (() => {
         await AUDIT_REMOTE.approveLegacyAdoption(candidate);
       }
       audit = candidate;
+      editorUserId = await AUDIT_REMOTE.ownerKey();
       isDirty = false;
       stepIndex = audit.currentStep || 0;
       renderStep();
@@ -286,6 +291,7 @@ const AUDIT_APP = (() => {
   async function showPublicAudit(auditId) {
     if (typeof centerModal !== 'undefined') centerModal.hidden = true;
     audit = null;
+    editorUserId = null;
     openModal();
     title.textContent = 'Resultado público da auditoria';
     environmentLabel.textContent = 'Consultando resultado aprovado…';
@@ -995,8 +1001,25 @@ const AUDIT_APP = (() => {
       authStatus.textContent = `Não foi possível entrar: ${error.message || error}`;
     }
   });
+  async function hidePrivateEditorBeforeAccountChange() {
+    if (modal.hidden || !audit || !editorUserId) return;
+    // Persistir os campos ainda visíveis antes de retirar o formulário.
+    if (content.querySelector('#auditForm') && audit.status !== AUDIT_DATA.STATUS.COMPLETED) captureForm();
+    clearTimeout(saveTimer);
+    await saveNow({ scheduleRemote: false });
+    if (isDirty) throw new Error('Existem alterações ainda não gravadas neste dispositivo.');
+    modal.hidden = true;
+    content.replaceChildren();
+    audit = null;
+    environment = null;
+    editorUserId = null;
+    editGeneration += 1;
+    if (authModal.hidden && centerModal.hidden) document.body.classList.remove('audit-open');
+  }
+
   signOutButton.addEventListener('click', async () => {
     try {
+      await hidePrivateEditorBeforeAccountChange();
       await AUDIT_REMOTE.signOut();
       await setAuthState(null, 'Sessão encerrada. Nenhuma auditoria local foi apagada.');
     } catch (error) {
@@ -1020,7 +1043,17 @@ const AUDIT_APP = (() => {
   });
   refreshAccounts.addEventListener('click', loadAccessRequests);
   refreshParticipation.addEventListener('click', loadAuditParticipationRequests);
-  AUDIT_REMOTE.onAuthStateChange((_event, user) => { setAuthState(user).catch(error => console.error('[Auth]', error)); });
+  AUDIT_REMOTE.onAuthStateChange(async (_event, user) => {
+    try {
+      if (editorUserId && user?.id !== editorUserId) {
+        await hidePrivateEditorBeforeAccountChange();
+      }
+    } catch (error) {
+      showLocalSaveError(error);
+      console.warn('[AuditAuth] Não foi possível ocultar o editor sem preservar os dados.', error);
+    }
+    setAuthState(user).catch(error => console.error('[Auth]', error));
+  });
 
   // v16: central de consulta, sem regravar auditorias nem iniciar sincronizacao automatica.
   const centerModal = document.getElementById('auditCenterModal');
