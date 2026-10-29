@@ -1043,18 +1043,6 @@ const AUDIT_APP = (() => {
   });
   refreshAccounts.addEventListener('click', loadAccessRequests);
   refreshParticipation.addEventListener('click', loadAuditParticipationRequests);
-  AUDIT_REMOTE.onAuthStateChange(async (_event, user) => {
-    try {
-      if (editorUserId && user?.id !== editorUserId) {
-        await hidePrivateEditorBeforeAccountChange();
-      }
-    } catch (error) {
-      showLocalSaveError(error);
-      console.warn('[AuditAuth] Não foi possível ocultar o editor sem preservar os dados.', error);
-    }
-    setAuthState(user).catch(error => console.error('[Auth]', error));
-  });
-
   // v16: central de consulta, sem regravar auditorias nem iniciar sincronizacao automatica.
   const centerModal = document.getElementById('auditCenterModal');
   const centerButton = document.getElementById('auditCenterBtn');
@@ -1260,6 +1248,30 @@ const AUDIT_APP = (() => {
   });
   window.addEventListener('online', () => { if (!modal.hidden) saveState.textContent = 'Conexão restabelecida · sincronização será tentada'; });
   window.addEventListener('offline', () => { if (!modal.hidden) saveState.textContent = 'Modo offline · dados permanecem salvos neste dispositivo'; });
+  // Registrar o listener depois da inicialização da Central de Auditorias:
+  // uma sessão trocada não pode manter a lista privada de outra conta visível.
+  let currentSessionUserId = null;
+  AUDIT_REMOTE.onAuthStateChange(async (_event, user) => {
+    const nextUserId = user?.id || null;
+    if (currentSessionUserId && currentSessionUserId !== nextUserId) {
+      centerRecords = [];
+      centerResults.replaceChildren();
+      centerModal.hidden = true;
+      centerIsAdmin = false;
+      centerCanAudit = false;
+    }
+    currentSessionUserId = nextUserId;
+    try {
+      if (editorUserId && nextUserId !== editorUserId) {
+        await hidePrivateEditorBeforeAccountChange();
+      }
+    } catch (error) {
+      showLocalSaveError(error);
+      console.warn('[AuditAuth] Falha ao preservar o editor durante a troca de conta.', error);
+    }
+    setAuthState(user).catch(error => console.error('[Auth]', error));
+  });
+
   AUDIT_STORAGE.openDatabase().catch(error => console.error('[AuditStorage]', error));
 
   return Object.freeze({ openAudit, openHistory });
