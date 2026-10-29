@@ -159,6 +159,33 @@ const AUDIT_STORAGE = (() => {
     });
   }
 
+  // Uma consulta remota pode terminar depois de uma nova edição no dispositivo.
+  // A leitura e a decisão de substituir acontecem na MESMA transação IndexedDB.
+  async function saveRemoteIfClean(record) {
+    const remote = normalizeAudit(record);
+    const db = await openDatabase();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORES.AUDITS, 'readwrite');
+      const store = tx.objectStore(STORES.AUDITS);
+      let saved = false, failure = null;
+      const read = store.get(remote.auditId);
+      read.onerror = () => { failure = read.error; tx.abort(); };
+      read.onsuccess = () => {
+        const current = read.result;
+        // Um colaborador nunca deve perder o vínculo local com sua conta.
+        // As versões pendentes, com erro ou conflito jamais são sobrescritas.
+        if (current && (current.collaborationEditorId ||
+            current.syncState !== 'SYNCED' ||
+            Number(remote.serverRevision || 0) < Number(current.serverRevision || 0))) return;
+        const put = store.put(remote);
+        put.onerror = () => { failure = put.error; tx.abort(); };
+        saved = true;
+      };
+      tx.oncomplete = () => resolve({ saved });
+      tx.onabort = () => reject(failure || tx.error || new Error('Falha ao recuperar versão remota.'));
+    });
+  }
+
   const setMeta = (key, value) => requestResult(STORES.META, 'readwrite', store => store.put({ key, value }));
   const getConflict = conflictId => requestResult(STORES.CONFLICTS, 'readonly', store => store.get(conflictId));
   const listConflicts = () => requestResult(STORES.CONFLICTS, 'readonly', store => store.getAll());
@@ -235,7 +262,7 @@ const AUDIT_STORAGE = (() => {
   }
 
   return Object.freeze({
-    openDatabase, saveAudit, saveRemoteAcknowledgment, getAudit, listAudits, listByEnvironment, findActive, listRecoveries,
+    openDatabase, saveAudit, saveRemoteAcknowledgment, saveRemoteIfClean, getAudit, listAudits, listByEnvironment, findActive, listRecoveries,
     saveEvidence, getEvidence, listEvidence, listEvidenceByAudit, listPending,
     saveConflict, getConflict, listConflicts, evidenceManifest,
     getDeviceId, exportAll, evidenceSummary

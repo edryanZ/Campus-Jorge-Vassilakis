@@ -423,6 +423,9 @@ const AUDIT_REMOTE = (() => {
   }
 
   async function syncAudit(record) {
+    // Um conflito exige resolução humana; tentar novamente automaticamente
+    // poderia substituir uma versão que foi preservada para análise.
+    if (record?.syncState === 'CONFLICT') return { skipped: true, reason: 'UNRESOLVED_CONFLICT' };
     const access = await getAccess();
     if (!access?.canAudit) return { skipped: true, reason: 'UNAUTHORIZED' };
     const user = await sessionUser();
@@ -430,6 +433,8 @@ const AUDIT_REMOTE = (() => {
     const previous = locks.get(key) || Promise.resolve();
     const task = previous.catch(() => {}).then(async () => {
       const latest = await AUDIT_STORAGE.getAudit(record.auditId) || record;
+      if (latest.syncState === 'CONFLICT')
+        return { skipped: true, reason: 'UNRESOLVED_CONFLICT' };
       return syncAuditOnce(latest);
     });
     locks.set(key, task);
@@ -437,7 +442,8 @@ const AUDIT_REMOTE = (() => {
   }
 
   function scheduleSync(record, delay = 5000) {
-    if (!record || AUDIT_SYNC_CORE.isRecoveryAudit(record)) return Promise.resolve({ skipped: true });
+    if (!record || AUDIT_SYNC_CORE.isRecoveryAudit(record) || record.syncState === 'CONFLICT')
+      return Promise.resolve({ skipped: true, reason: 'UNRESOLVED_CONFLICT' });
     const existing = scheduled.get(record.auditId);
     if (existing) { clearTimeout(existing.timer); existing.resolve({ skipped: true, superseded: true }); }
     return new Promise(resolve => {
@@ -483,10 +489,10 @@ const AUDIT_REMOTE = (() => {
         if (logicalLocal && logicalLocal.auditId !== remote.auditId) {
           await preserveConflict(logicalLocal, remote, 'ACTIVE_IDENTITY');
           conflicts += 1;
-        } else await AUDIT_STORAGE.saveAudit(remote, { allowRemoteMerge: true, enforceActiveUniqueness: true });
+        } else await AUDIT_STORAGE.saveRemoteIfClean(remote);
       }
       else if (local.syncState === 'SYNCED' && Number(remote.serverRevision) >= Number(local.serverRevision || 0)) {
-        await AUDIT_STORAGE.saveAudit(remote, { allowRemoteMerge: true });
+        await AUDIT_STORAGE.saveRemoteIfClean(remote);
       } else if (Number(remote.serverRevision || 0) > Number(local.serverRevision || 0) && ['PENDING', 'ERROR', 'CONFLICT', 'LOCAL_ONLY'].includes(local.syncState)) {
         await preserveConflict(local, remote, 'REMOTE_NEWER');
         conflicts += 1;
