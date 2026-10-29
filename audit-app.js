@@ -544,6 +544,11 @@ const AUDIT_APP = (() => {
     const category = content.querySelector('[name="ncCategory"]')?.value;
     if (!AUDIT_DATA.NON_CONFORMITY_CATEGORIES.includes(category)) return;
     const description = content.querySelector('[name="ncDescription"]')?.value.trim() || '';
+    if (!description) {
+      window.alert('Descreva a não conformidade antes de registrá-la.');
+      content.querySelector('[name="ncDescription"]')?.focus();
+      return;
+    }
     const priority = content.querySelector('[name="ncPriority"]')?.value;
     if (!AUDIT_DATA.PRIORITIES.includes(priority)) return;
     audit.nonConformities.push({
@@ -554,6 +559,10 @@ const AUDIT_APP = (() => {
       suggestedDeadline: content.querySelector('[name="ncDeadline"]')?.value || '',
       status: 'OPEN', evidenceIds: []
     });
+    // Os campos são apenas um formulário temporário de inclusão. Não
+    // reidratar a descrição anterior nem perder a inclusão no autosave.
+    audit.data.nonConformities = {};
+    markDirty();
     scheduleSave(true);
     renderStep();
   }
