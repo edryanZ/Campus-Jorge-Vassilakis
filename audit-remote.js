@@ -359,7 +359,9 @@ const AUDIT_REMOTE = (() => {
 
   async function syncAuditOnce(record) {
     const user = await currentUser();
-    if (!client || !user || !navigator.onLine || AUDIT_SYNC_CORE.isRecoveryAudit(record) || !(await getAccess())?.canAudit) return { skipped: true };
+    const access = await getAccess();
+    if (!client || !user || !navigator.onLine || AUDIT_SYNC_CORE.isRecoveryAudit(record) || !access?.canAudit || access.offline)
+      return { skipped: true, reason: access?.offline ? 'SERVER_UNAVAILABLE' : 'UNAUTHORIZED' };
     // Impede que um usuário sincronize registros privados pertencentes a outra conta
     // no mesmo dispositivo. Registros antigos sem dono continuam preservados.
     if (record.collaborationEditorId && record.collaborationEditorId !== user.id)
@@ -439,7 +441,7 @@ const AUDIT_REMOTE = (() => {
     // poderia substituir uma versão que foi preservada para análise.
     if (record?.syncState === 'CONFLICT') return { skipped: true, reason: 'UNRESOLVED_CONFLICT' };
     const access = await getAccess();
-    if (!access?.canAudit) return { skipped: true, reason: 'UNAUTHORIZED' };
+    if (!access?.canAudit || access.offline) return { skipped: true, reason: access?.offline ? 'SERVER_UNAVAILABLE' : 'UNAUTHORIZED' };
     const user = await sessionUser();
     const key = AUDIT_SYNC_CORE.activeKey(user?.id || AUDIT_SYNC_CORE.ownerKey(record), record.environmentId) || lockKey(record);
     const previous = locks.get(key) || Promise.resolve();
@@ -489,7 +491,9 @@ const AUDIT_REMOTE = (() => {
 
   async function pullRemote() {
     const user = await currentUser();
-    if (!client || !user || !navigator.onLine || !(await getAccess())?.canAudit) return { skipped: true };
+    const access = await getAccess();
+    if (!client || !user || !navigator.onLine || !access?.canAudit || access.offline)
+      return { skipped: true, reason: access?.offline ? 'SERVER_UNAVAILABLE' : 'UNAUTHORIZED' };
     const result = await client.from('audits').select('*').order('updated_at', { ascending: false });
     if (result.error) throw result.error;
     let conflicts = 0;
@@ -581,7 +585,9 @@ const AUDIT_REMOTE = (() => {
   }
 
   async function syncPending() {
-    if (syncing || !client || !navigator.onLine || !(await getAccess())?.canAudit) return { skipped: true };
+    const access = await getAccess();
+    if (syncing || !client || !navigator.onLine || !access?.canAudit || access.offline)
+      return { skipped: true, reason: access?.offline ? 'SERVER_UNAVAILABLE' : 'UNAUTHORIZED' };
     syncing = true;
     let synced = 0; let failed = 0; let pendingEvidence = 0;
     dispatch('audit:sync-start');

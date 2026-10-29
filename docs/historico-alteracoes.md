@@ -27,3 +27,13 @@ Ver: `docs/revisao-sincronizacao-v16-2-2026-10-28.md`.
 - Service worker atualizado para `v16-2-5`; `main` e dados da Sala 1 preservados.
 
 Relatório complementar: `docs/revisao-sincronizacao-v16-2-2026-10-28.md`.
+
+## 2026-10-29 — Segurança adicional, recuperação offline e regressões
+
+- Pull remoto preserva atomicamente rascunhos pendentes e a identidade de colaboradores.
+- Registros com estado `CONFLICT` deixam de ser enviados automaticamente.
+- Continuação offline com autorização recente durante indisponibilidade do Supabase, sem criar novas auditorias sem validação do servidor.
+- RPC de participação compartilhada corrigida para sinalizar `sync_complete` somente após checagem de evidências; revisão técnica adicional registrada pelo trigger.
+- `tests/auditoria-sync-policies.test.cjs` adicionado; GitHub Actions Node 22 configurado apenas na branch de correções.
+- Cache atualizado para v16.2.6.
+- Proteções testadas com dados fictícios, sem mutação da Sala 1 real. Ver relatório de revisão.

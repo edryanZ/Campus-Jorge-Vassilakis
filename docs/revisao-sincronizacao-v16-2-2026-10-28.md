@@ -63,3 +63,36 @@ O advisor de segurança apontou funções `SECURITY DEFINER` executáveis por us
 - A prévia da Vercel continuou separada de `main`. Nenhuma alteração da Sala 1 ou upload de fotografia real foi executado.
 
 **Pendente:** ensaio real autenticado no navegador, especialmente dois auditores, modo offline e prova de upload/download de imagem. Avisos de segurança/performance do Supabase ainda requerem avaliação específica antes de produção.
+
+## Encerramento técnico automatizado — 29/10/2026
+
+**Situação:** Supabase `ebzsxyxuezugfaumyorn` ativo, histórico e evidência originais preservados. Versão principal da Vercel mantida sem alteração; testes e correções apenas em `fix-auditoria-sincronizacao-v16-2`.
+
+### Correções adicionais
+
+- Recuperação offline de rascunhos **previamente autorizados nas últimas 24 horas**, mesmo com rede conectada mas Supabase indisponível. Não permite criar auditoria nova sem verificar a ocupação da sala.
+- Download de auditoria remota usa decisão atômica no IndexedDB e nunca substitui alterações locais pendentes ou o contexto de edição de colaborador.
+- Registros com estado `CONFLICT` são preservados; o sincronizador automático não os reenvia sem resolução.
+- O RPC `sync_shared_audit` foi corrigido em `supabase/migrations/20261029_v16_2_shared_sync_confirmation.sql`. A confirmação de `sync_complete` ocorre após o gatilho de sanitização, somente quando as evidências estão completas. A segunda atualização produz uma revisão técnica adicional por sincronização compartilhada. O RPC foi atualizado sem modificar registros reais.
+- O cliente não tenta sincronizar/dar pull de dados quando a autorização disponível é apenas a cacheada offline.
+- PWA com cache `campus-auditoria-v16-2-6` para receber todos os módulos finais.
+
+### Verificações reais somente leitura
+
+- `anon` sem permissão direta de SELECT em `audits` e `audit_evidence`, nem EXECUTE nas RPCs compartilhadas; a consulta pública separada possui SELECT permitido.
+- `sync_shared_audit` atualizada e EXECUTE de `anon` negado.
+- Sanitização de publicação testada com registro fictício passado **somente como argumento SQL**: indicador de iluminação preservado; nome fictício do auditor, notas e fotografia excluídos do resultado.
+- Contagens do banco após migração: **1 auditoria, revisão 33, 33 entradas de histórico, 1 evidência, 0 participantes**; sem alteração de dados reais.
+- GitHub Actions: testes nativos Node 22 executados com sucesso em `https://github.com/edryanZ/Campus-Jorge-Vassilakis/actions/runs/40969306151`. A execução posterior ao presente fechamento deve ser confirmada por novo SHA.
+- Avisos do Supabase ainda existentes: funções SECURITY DEFINER expostas a `authenticated` (exigem validação manual das autorizações, apesar de checagens explícitas), proteção de senhas vazadas desativada, índices/políticas com sugestões de performance. A tabela `audit_participation_requests` não possui policy direta por decisão de arquitetura: acesso apenas por RPC controlada.
+
+### Testes que dependem da pessoa e do dispositivo
+
+1. Acessar a **prévia** com conta autorizada; não iniciar como visitante anônimo.
+2. Iniciar sala-piloto nova, informar alguns dados, fechar, atualizar, reabrir e conferir.
+3. Anexar fotografia fictícia ou autorizada, concluir e conferir indicador de sincronização.
+4. Desligar conexão no celular durante edição já autorizada, salvar localmente e recuperar após retorno da rede.
+5. Caso exista segunda conta de auditor aprovada, testar pedido/aprovação/revogação e duas edições concorrentes, sem alterar a Sala 1 real.
+6. Somente depois dos testes decidir sobre promoção ao domínio principal.
+
+**Limitação honesta:** não houve login real de duas contas, nem ensaio de câmera/IndexedDB/Storage no navegador do usuário, e não foi feita uma auditoria ambiental real automaticamente.
