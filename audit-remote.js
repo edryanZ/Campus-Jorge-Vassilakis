@@ -67,21 +67,33 @@ const AUDIT_REMOTE = (() => {
     const user = await sessionUser();
     if (!user) return null;
     const key = `audit-verified-access:${user.id}`;
-    if (!navigator.onLine) {
+    const cachedOffline = () => {
       let saved = verifiedAccess.get(user.id);
       if (!saved) {
         try { saved = JSON.parse(localStorage.getItem(key) || 'null'); }
         catch (_error) { saved = null; }
       }
-      // Offline pode continuar por ate 24h depois da ultima validacao.
-      if (saved?.active && saved?.checkedAt > Date.now() - 86400000)
+      // A autorização offline vale no máximo 24h, mesmo quando a rede está
+      // conectada mas o servidor está temporariamente indisponível.
+      if (saved?.active && saved?.canAudit && saved?.checkedAt > Date.now() - 86400000)
         return { ...saved, offline: true };
-      return { active: false, role: null, reviewStatus: 'OFFLINE', canAudit: false, admin: false };
+      return { active: false, role: null, reviewStatus: 'OFFLINE', canAudit: false, admin: false, offline: true };
+    };
+    if (!navigator.onLine) return cachedOffline();
+    let data;
+    try {
+      const response = await client.from('profiles')
+        .select('role,active,display_name,review_status')
+        .eq('user_id', user.id).maybeSingle();
+      if (response.error) throw response.error;
+      data = response.data;
+    } catch (error) {
+      // O Supabase pode estar pausado mesmo com Wi-Fi/4G conectado. Nesse
+      // caso, permitir apenas continuação LOCAL previamente autorizada.
+      const cached = cachedOffline();
+      if (cached.canAudit) return cached;
+      throw error;
     }
-    const { data, error } = await client.from('profiles')
-      .select('role,active,display_name,review_status')
-      .eq('user_id', user.id).maybeSingle();
-    if (error) throw error;
     const result = {
       userId: user.id, role: data?.role || null, active: Boolean(data?.active),
       displayName: data?.display_name || '', reviewStatus: data?.review_status || 'PENDING',

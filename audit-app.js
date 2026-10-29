@@ -72,7 +72,7 @@ const AUDIT_APP = (() => {
     const owner = await AUDIT_REMOTE.ownerKey();
     const key = `${owner}::${target.environmentId}`;
     if (openLocks.has(key)) return openLocks.get(key);
-    const task = openAuditLocked(target, owner).finally(() => openLocks.delete(key));
+    const task = openAuditLocked(target, owner, access).finally(() => openLocks.delete(key));
     openLocks.set(key, task);
     return task;
   }
@@ -112,7 +112,7 @@ const AUDIT_APP = (() => {
     saveState.textContent = 'Participação autorizada · dados compartilhados · edição online';
   }
 
-  async function openAuditLocked(target, owner) {
+  async function openAuditLocked(target, owner, access) {
     environment = target;
     let local = await AUDIT_STORAGE.findActive(environment.environmentId, owner);
     if (local?.collaborationEditorId && local.collaborationEditorId !== owner) {
@@ -126,7 +126,7 @@ const AUDIT_APP = (() => {
       local = await AUDIT_STORAGE.findActive(environment.environmentId, `LOCAL:${await AUDIT_STORAGE.getDeviceId()}`);
     }
     let ownedRemote = null;
-    if (AUDIT_REMOTE.configured && navigator.onLine && !owner.startsWith('LOCAL:')) {
+    if (AUDIT_REMOTE.configured && navigator.onLine && !access.offline && !owner.startsWith('LOCAL:')) {
       ownedRemote = await AUDIT_REMOTE.findRemoteActive(environment.environmentId);
       if (ownedRemote && local && ownedRemote.auditId !== local.auditId) {
         await AUDIT_REMOTE.preserveConflict(local, ownedRemote, 'ACTIVE_IDENTITY');
@@ -137,7 +137,7 @@ const AUDIT_APP = (() => {
         local = ownedRemote;
       }
     }
-    if (AUDIT_REMOTE.configured && navigator.onLine && !owner.startsWith('LOCAL:')) {
+    if (AUDIT_REMOTE.configured && navigator.onLine && !access.offline && !owner.startsWith('LOCAL:')) {
       // Mesmo que haja rascunho local legado, a sala ocupada por outra
       // conta nunca pode ser assumida ou sincronizada automaticamente.
       // Não oferecer criação local quando há auditoria ativa de outro usuário.
@@ -179,12 +179,12 @@ const AUDIT_APP = (() => {
     if (!local) {
       // Não iniciar rascunho novo offline sem conferir a ocupação global.
       // Uma auditoria já existente no dispositivo continua acessível offline.
-      if (AUDIT_REMOTE.configured && !navigator.onLine) {
+      if (AUDIT_REMOTE.configured && (!navigator.onLine || access.offline)) {
         window.alert('Para iniciar uma nova auditoria, conecte-se à internet para verificar se o ambiente já está sendo auditado. Auditorias existentes neste dispositivo continuam preservadas.');
         return;
       }
       const proposed = createAudit(environment, owner);
-      if (AUDIT_REMOTE.configured && navigator.onLine && !owner.startsWith('LOCAL:')) {
+      if (AUDIT_REMOTE.configured && navigator.onLine && !access.offline && !owner.startsWith('LOCAL:')) {
         try {
           const result = await AUDIT_REMOTE.resumeOrCreateActive(proposed);
           local = result.audit;
@@ -215,7 +215,7 @@ const AUDIT_APP = (() => {
     openModal();
     renderStep();
     await saveNow({ scheduleRemote: false });
-    if (AUDIT_REMOTE.configured && navigator.onLine && ['LOCAL_ONLY', 'PENDING', 'ERROR'].includes(audit.syncState)) {
+    if (AUDIT_REMOTE.configured && navigator.onLine && !access.offline && ['LOCAL_ONLY', 'PENDING', 'ERROR'].includes(audit.syncState)) {
       AUDIT_REMOTE.scheduleSync(audit);
     }
   }
