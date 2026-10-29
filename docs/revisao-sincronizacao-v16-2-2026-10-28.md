@@ -48,3 +48,18 @@ O advisor de segurança apontou funções `SECURITY DEFINER` executáveis por us
 7. Validar a prévia no celular; só promover após testes aprovados. Não alterar Sala 1 real para testes.
 
 **Status final desta revisão: correções aplicadas na branch e no controle de evidências do banco; testes simulados aprovados; validação completa de ponta a ponta ainda pendente.**
+
+## Continuação de 29/10/2026 — revisão funcional
+
+- Corrigida a inclusão de não conformidades: agora requer descrição, marca o registro como modificado, solicita salvamento e limpa os campos de inclusão.
+- Inicialização dos campos de data e horário ajustada ao relógio local do dispositivo; timestamps internos de sincronização permanecem UTC.
+- Campos de medição ambiental aceitam decimais (`step="any"`); campos de contagem mantêm inteiros não negativos.
+- Salvamento local em fila para serializar escritas iniciadas simultaneamente; fechamento do editor verifica persistência completa.
+- Ao sair ou trocar de conta, o editor privado é salvo/ocultado e a Central de Auditorias limpa os registros privados anteriores.
+- Salvamento de evidência protegido contra seleção simultânea; os comandos Concluir, Fechar e Sair aguardam gravações de fotografias ainda em andamento.
+- Service worker: nome de cache atualizado para `campus-auditoria-v16-2-5`.
+- Adicionado `tests/auditoria-v16-2.test.cjs` (Node nativo, sem dependências de terceiros) para verificar sintaxe, elementos HTML, data/hora local, campos numéricos, não conformidades e espera por evidências.
+- **Execução de casos de teste:** 6/6 passaram em um executor JavaScript compatível com os testes Node; também foram feitas simulações isoladas de filas de salvamento e concorrência. O comando `node --test tests/auditoria-v16-2.test.cjs` ainda deve ser repetido num ambiente Node real/CI.
+- A prévia da Vercel continuou separada de `main`. Nenhuma alteração da Sala 1 ou upload de fotografia real foi executado.
+
+**Pendente:** ensaio real autenticado no navegador, especialmente dois auditores, modo offline e prova de upload/download de imagem. Avisos de segurança/performance do Supabase ainda requerem avaliação específica antes de produção.

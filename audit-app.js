@@ -432,7 +432,14 @@ const AUDIT_APP = (() => {
     if (audit) {
       try {
         await evidenceSaveFinished;
-        await saveNow({ scheduleRemote: false });
+        // Uma edição pode chegar durante uma gravação assíncrona. Repetir
+        // até que o formulário esteja efetivamente persistido.
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          const result = await saveNow({ scheduleRemote: false });
+          if (!isDirty && !result?.superseded) break;
+        }
+        if (isDirty) throw new Error('O formulário ainda possui alterações pendentes. Tente fechar novamente.');
+        clearTimeout(saveTimer);
       } catch (error) {
         showLocalSaveError(error);
         return; // Não fechar com mudanças ainda não gravadas.

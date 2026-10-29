@@ -15,3 +15,15 @@
 Ver: `docs/revisao-sincronizacao-v16-2-2026-10-28.md`.
 
 > Esta entrada foi criada nesta branch para registrar mudanças auditáveis; versões anteriores permanecem documentadas no README e nos relatórios existentes.
+
+## 2026-10-29 — Continuação da revisão v16.2
+
+- Não conformidades agora são salvas ao registrar, com descrição obrigatória e limpeza dos campos.
+- Datas e horários de campo usam o relógio local; campos ambientais de medição aceitam decimais.
+- Operações de salvamento são serializadas; fechar não ignora uma edição pendente.
+- Troca de contas oculta o editor e a Central de Auditorias da conta anterior.
+- Evidências pendentes são aguardadas antes da conclusão, do fechamento e da saída.
+- Testes de regressão adicionados em `tests/auditoria-v16-2.test.cjs`; seis verificações executadas em ambiente de teste JS compatível.
+- Service worker atualizado para `v16-2-5`; `main` e dados da Sala 1 preservados.
+
+Relatório complementar: `docs/revisao-sincronizacao-v16-2-2026-10-28.md`.
