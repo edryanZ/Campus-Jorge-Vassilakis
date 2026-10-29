@@ -13,6 +13,7 @@ const AUDIT_APP = (() => {
   let previouslyFocusedElement = null;
   let isDirty = false;
   let editGeneration = 0;
+  let localSaveQueue = Promise.resolve();
   const openLocks = new Map();
 
   const uid = prefix => `${prefix}-${crypto.randomUUID?.() || `${Date.now()}-${crypto.getRandomValues(new Uint32Array(1))[0].toString(16)}`}`;
@@ -21,6 +22,12 @@ const AUDIT_APP = (() => {
 
   function createAudit(target, owner) {
     const timestamp = now();
+    // O ISO é UTC; campos de data/hora da coleta usam o relógio local
+    // do dispositivo para evitar registrar o dia seguinte à noite.
+    const clock = new Date();
+    const pad = value => String(value).padStart(2, '0');
+    const localDate = `${clock.getFullYear()}-${pad(clock.getMonth() + 1)}-${pad(clock.getDate())}`;
+    const localTime = `${pad(clock.getHours())}:${pad(clock.getMinutes())}`;
     return {
       schemaVersion: 2,
       auditId: uid('AUDIT'),
@@ -31,7 +38,7 @@ const AUDIT_APP = (() => {
       startedAt: null,
       completedAt: null,
       currentStep: 0,
-      data: { identification: { date: timestamp.slice(0, 10), startTime: timestamp.slice(11, 16), inspector: '', responsible: '', notes: '' } },
+      data: { identification: { date: localDate, startTime: localTime, inspector: '', responsible: '', notes: '' } },
       nonConformities: [],
       evidenceIds: [],
       ownerId: owner?.startsWith('LOCAL:') ? null : owner,
@@ -413,6 +420,7 @@ const AUDIT_APP = (() => {
   }
 
   async function closeModal() {
+    clearTimeout(saveTimer);
     if (audit) {
       try {
         await saveNow({ scheduleRemote: false });
@@ -471,7 +479,13 @@ const AUDIT_APP = (() => {
   function field(name, label, type = 'text', options = '') {
     if (type === 'select') return `<label><span>${label}</span><select name="${name}"><option value="">Selecione</option>${options}</select></label>`;
     if (type === 'textarea') return `<label class="full"><span>${label}</span><textarea name="${name}" rows="3"></textarea></label>`;
-    return `<label><span>${label}</span><input name="${name}" type="${type}" /></label>`;
+    const measuredValues = ['temperature', 'noiseDb', 'lux', 'installedPower', 'estimatedConsumption'];
+    const numeric = type === 'number'
+      ? (measuredValues.includes(name)
+          ? ` step="any"${name === 'temperature' ? '' : ' min="0"'} inputmode="decimal"`
+          : ' step="1" min="0" inputmode="numeric"')
+      : '';
+    return `<label><span>${label}</span><input name="${name}" type="${type}"${numeric} /></label>`;
   }
 
   const yesNoNa = '<option>Sim</option><option>Não</option><option>N/A</option>';
@@ -619,14 +633,22 @@ const AUDIT_APP = (() => {
 
   async function saveNow({ scheduleRemote = true } = {}) {
     if (!audit || audit.status === AUDIT_DATA.STATUS.COMPLETED) return;
-    if (!isDirty) return { skipped: true };
+    if (!isDirty) {
+      await localSaveQueue;
+      return { skipped: true };
+    }
     audit.updatedAt = now();
     audit.currentStep = stepIndex;
     // Guarde uma cópia e nunca confirme um salvamento antigo se o usuário
     // continuar digitando enquanto o IndexedDB trabalha.
     const snapshot = structuredClone(audit);
     const savedGeneration = editGeneration;
-    await AUDIT_STORAGE.saveAudit(snapshot, { enforceActiveUniqueness: true });
+    // Serializa gravações iniciadas em rápida sequência. Assim, uma escrita
+    // antiga não pode terminar depois da escrita mais recente.
+    const transaction = localSaveQueue.catch(() => {}).then(() =>
+      AUDIT_STORAGE.saveAudit(snapshot, { enforceActiveUniqueness: true }));
+    localSaveQueue = transaction;
+    await transaction;
     if (!audit || audit.auditId !== snapshot.auditId) return { superseded: true };
     if (editGeneration !== savedGeneration) {
       scheduleSave();
