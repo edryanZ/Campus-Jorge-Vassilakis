@@ -29,9 +29,9 @@ test('módulos JavaScript possuem sintaxe válida', () => {
 
 test('IDs HTML são únicos e referências DOM existem', () => {
   const html = read('index.html');
-  const ids = [...html.matchAll(/\\s+id=["']([^"']+)["']/g)].map(match => match[1]);
+  const ids = [...html.matchAll(/\s+id=["']([^"']+)["']/g)].map(match => match[1]);
   assert.equal(ids.length, new Set(ids).size);
-  const refs = [...(app + read('app.js')).matchAll(/getElementById\\(['"]([^'"]+)['"]\\)/g)]
+  const refs = [...(app + read('app.js')).matchAll(/getElementById\(['"]([^'"]+)['"]\)/g)]
     .map(match => match[1]);
   for (const id of refs) assert.ok(ids.includes(id), `Elemento ausente: ${id}`);
 });
