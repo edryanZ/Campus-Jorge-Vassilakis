@@ -1,0 +1,34 @@
+name: Verificação técnica - Auditoria v16.2
+
+on:
+  push:
+    branches:
+      - fix-auditoria-sincronizacao-v16-2
+    paths:
+      - 'audit-*.js'
+      - 'app.js'
+      - 'campus-data.js'
+      - 'index.html'
+      - 'sw.js'
+      - 'supabase-config.js'
+      - 'tests/**'
+      - '.github/workflows/auditoria-regressao.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  regression:
+    name: Testes sem dados reais
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout do código de testes
+        uses: actions/checkout@v4
+      - name: Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Testar sintaxe, interface, salvamento, privacidade e sincronização
+        run: node --test tests/*.test.cjs
