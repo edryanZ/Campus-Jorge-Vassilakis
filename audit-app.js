@@ -15,6 +15,8 @@ const AUDIT_APP = (() => {
   let editGeneration = 0;
   let editorUserId = null;
   let localSaveQueue = Promise.resolve();
+  let evidenceWriteActive = false;
+  let evidenceSaveFinished = Promise.resolve();
   const openLocks = new Map();
 
   const uid = prefix => `${prefix}-${crypto.randomUUID?.() || `${Date.now()}-${crypto.getRandomValues(new Uint32Array(1))[0].toString(16)}`}`;
@@ -429,6 +431,7 @@ const AUDIT_APP = (() => {
     clearTimeout(saveTimer);
     if (audit) {
       try {
+        await evidenceSaveFinished;
         await saveNow({ scheduleRemote: false });
       } catch (error) {
         showLocalSaveError(error);
@@ -588,6 +591,11 @@ const AUDIT_APP = (() => {
   }
 
   async function storeEvidence(event) {
+    if (evidenceWriteActive) {
+      window.alert('Aguarde a confirmação da fotografia anterior antes de selecionar outra.');
+      event.target.value = '';
+      return;
+    }
     if (audit?.collaborationEditorId) {
       window.alert('A inclusão de novas evidências está restrita ao responsável original por enquanto.');
       event.target.value = '';
@@ -596,17 +604,25 @@ const AUDIT_APP = (() => {
     const file = event.target.files[0];
     if (!file) return;
     const evidenceId = uid('EVIDENCE');
+    const targetAuditId = audit?.auditId;
+    if (!targetAuditId) return;
     if (file.size > 10 * 1024 * 1024) {
       alert('A evidência excede o limite de 10 MB. Reduza a imagem antes de anexar.');
       event.target.value = '';
       return;
     }
+    evidenceWriteActive = true;
+    let releaseEvidenceSave;
+    evidenceSaveFinished = new Promise(resolve => { releaseEvidenceSave = resolve; });
     try {
       await AUDIT_STORAGE.saveEvidence({
-        evidenceId, auditId: audit.auditId, nonConformityId: null,
+        evidenceId, auditId: targetAuditId, nonConformityId: null,
         description: file.name, mimeType: file.type, size: file.size,
         createdAt: now(), blob: file, syncState: AUDIT_REMOTE.configured ? 'PENDING' : 'LOCAL_ONLY', syncError: null
       });
+      if (!audit || audit.auditId !== targetAuditId) {
+        throw new Error('O ambiente ativo mudou durante o salvamento da fotografia; o arquivo ficou preservado no dispositivo sem vínculo automático.');
+      }
       audit.evidenceIds.push(evidenceId);
       markDirty();
       const saved = await scheduleSave(true);
@@ -617,6 +633,10 @@ const AUDIT_APP = (() => {
     } catch (error) {
       showLocalSaveError(error);
       window.alert('A fotografia não foi completamente salva. Não feche a auditoria até tentar novamente.');
+    } finally {
+      evidenceWriteActive = false;
+      releaseEvidenceSave();
+      event.target.value = '';
     }
   }
 
@@ -683,6 +703,9 @@ const AUDIT_APP = (() => {
   }
 
   async function completeAudit() {
+    // Uma fotografia grande pode estar sendo salva enquanto a pessoa clica
+    // em concluir. Aguardar para não finalizar com o manifesto incompleto.
+    await evidenceSaveFinished;
     captureForm();
     if (!audit.data.identification?.inspector?.trim()) {
       alert('Informe o nome do(a) auditor(a) na etapa de identificação antes de concluir.');
@@ -697,6 +720,7 @@ const AUDIT_APP = (() => {
     audit.updatedAt = audit.completedAt;
     markDirty();
     try {
+      await localSaveQueue.catch(() => {});
       await AUDIT_STORAGE.saveAudit(audit);
     } catch (error) {
       audit.status = previousStatus;
@@ -1004,6 +1028,7 @@ const AUDIT_APP = (() => {
   async function hidePrivateEditorBeforeAccountChange() {
     if (modal.hidden || !audit || !editorUserId) return;
     // Persistir os campos ainda visíveis antes de retirar o formulário.
+    await evidenceSaveFinished;
     if (content.querySelector('#auditForm') && audit.status !== AUDIT_DATA.STATUS.COMPLETED) captureForm();
     clearTimeout(saveTimer);
     await saveNow({ scheduleRemote: false });
