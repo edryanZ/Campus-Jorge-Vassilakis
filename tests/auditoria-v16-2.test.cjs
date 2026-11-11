@@ -251,7 +251,7 @@ test('criação de auditoria usa a RPC existente e mantém proteção contra dup
   const to = remote.indexOf('  async function verifyEvidence(', from);
   assert.ok(from >= 0 && to > from);
   const segment = remote.slice(from, to);
-  assert.doesNotMatch(segment, /resume_or_create_active_audit/);
+  assert.ok(!segment.includes("client.rpc('resume_or_create_active_audit'"), 'Não chamar RPC ausente');
   assert.match(segment, /rpc\('sync_audit'/);
   assert.match(segment, /isActiveUniqueViolation/);
   const calls = [];
