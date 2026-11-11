@@ -1,4 +1,4 @@
-# Mapa interativo – Campus Jorge Vassilakis (prévia v16.1)
+# Mapa interativo – Campus Jorge Vassilakis (v16.3 em validação)
 
 Mapa estático e interativo em HTML, CSS, JavaScript e SVG, criado com base na planta de referência e nas informações confirmadas do Campus Jorge Vassilakis.
 
@@ -161,3 +161,14 @@ Esta versão está na branch de Preview `preview-v16-1-acessos`, não substitui 
 
 Veja o [roteiro de configuração e validação](docs/v16-1-acessos-validacao.md) e a [migração SQL da v16.1](supabase/migrations/20261021_v16_1_access_requests.sql).
 
+
+## Atualização operacional — 11/11/2026
+
+- Auditorias existentes no navegador são abertas primeiro; histórico e Central exibem cópias locais rapidamente e consultam o Supabase em segundo plano.
+- Login não aguarda a sincronização pendente; confira os indicadores de **salvo localmente** e **sincronizado com o Supabase**, que não são equivalentes.
+- Os botões **Ver dados preenchidos** e **Ver dados no Supabase** permitem comparar versões sem sobrescrever o IndexedDB.
+- Em caso de conflito, erro ou dados incompletos, preserve o navegador original e **não limpe o armazenamento do site**. Não crie outro rascunho para a mesma sala.
+- A proteção de acesso público ao domínio deve ser configurada na Vercel em **Security → Deployment Protection → Vercel Authentication → All Deployments**; apenas alterar o nome do site não impede acessos externos.
+- A aplicação não elimina automaticamente registros, fotos ou dados reais em revisões de interface. Testes de ponta a ponta com conta autorizada continuam necessários antes de declarar a produção validada.
+
+As correções foram preparadas e testadas na branch `fix-auditoria-sincronizacao-v16-2`. Consulte `docs/historico-alteracoes.md` para detalhes.
