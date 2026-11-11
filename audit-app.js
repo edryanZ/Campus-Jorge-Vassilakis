@@ -210,6 +210,13 @@ const AUDIT_APP = (() => {
   async function openHistory(mapId) {
     environment = AUDIT_DATA.getEnvironmentByMapId(mapId);
     if (!environment) return;
+    // Exibir a janela antes das consultas: rede lenta não bloqueia o botão.
+    audit = null;
+    openModal();
+    title.textContent = 'Histórico de auditorias';
+    environmentLabel.textContent = `${environment.blockName} · ${environment.roomNumber ? `Sala ${environment.roomNumber}` : environment.name}`;
+    content.innerHTML = '<div class="audit-empty"><h3>Carregando histórico…</h3><p>Consultando os registros deste ambiente.</p></div>';
+    try {
     let access = null;
     try { access = await AUDIT_REMOTE.getAccess(); }
     catch (error) { console.warn('[AuditAccess] Histórico privado indisponível:', error); }
@@ -236,9 +243,6 @@ const AUDIT_APP = (() => {
       .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
     const evidenceByAudit = new Map(await Promise.all(localItems.map(async item => [item.auditId, await AUDIT_STORAGE.evidenceSummary(item.auditId)])));
     audit = null;
-    openModal();
-    title.textContent = 'Histórico de auditorias';
-    environmentLabel.textContent = `${environment.blockName} · ${environment.roomNumber ? `Sala ${environment.roomNumber}` : environment.name}`;
     content.innerHTML = items.length || recoveries.legacy.length || recoveries.conflicts.length ? `<div class="audit-history">${items.map(item => `
       <article><strong>${statusLabel(item.status)}</strong><span>${new Date(item.updatedAt).toLocaleString('pt-BR')}</span>
       <small class="sync-badge">${syncLabel(item.syncState)}</small>
@@ -273,6 +277,11 @@ const AUDIT_APP = (() => {
       stepIndex = audit.currentStep || 0;
       renderStep();
     }));
+    } catch (error) {
+      console.error('[AuditHistory] Erro ao consultar histórico:', error);
+      content.innerHTML = `<div class="audit-empty"><h3>Histórico indisponível</h3><p>A consulta falhou. Suas auditorias locais continuam preservadas no dispositivo.</p><p>${escapeHtml(error.message || error)}</p><button type="button" class="audit-secondary" data-history-retry>Tentar novamente</button></div>`;
+      content.querySelector('[data-history-retry]')?.addEventListener('click', () => openHistory(mapId));
+    }
   }
 
   async function showPublicAudit(auditId) {
