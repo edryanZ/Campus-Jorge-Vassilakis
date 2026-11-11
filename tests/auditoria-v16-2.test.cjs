@@ -140,3 +140,15 @@ test('conclusão espera imagem pendente antes de salvar', async () => {
     { status:'COMPLETED', photos:['PHOTO-TEST'] }
   ]);
 });
+
+test('histórico abre janela antes da consulta assíncrona e informa falhas', () => {
+  const source = read('audit-app.js');
+  const start = source.indexOf('  async function openHistory(mapId) {');
+  const end = source.indexOf('  async function showPublicAudit(', start);
+  assert.ok(start > 0 && end > start, 'Rotina de histórico ausente');
+  const fn = source.slice(start, end);
+  assert.ok(fn.indexOf('openModal();') < fn.indexOf('await AUDIT_REMOTE.getAccess()'),
+    'Histórico deveria abrir antes da verificação remota');
+  assert.match(fn, /Histórico indisponível/);
+  assert.match(fn, /Tentar novamente/);
+});
