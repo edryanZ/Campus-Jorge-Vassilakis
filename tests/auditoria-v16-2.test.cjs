@@ -244,3 +244,105 @@ test('o editor preserva a distinção entre falha de acesso e conta revogada', (
   assert.match(fn, /acesso desta conta foi revogado/i);
   assert.match(fn, /Falha ao verificar autorização/);
 });
+
+test('criação de auditoria usa a RPC existente e mantém proteção contra duplicidade', async () => {
+  const remote = read('audit-remote.js');
+  const from = remote.indexOf('  async function resumeOrCreateActive(proposed) {');
+  const to = remote.indexOf('  async function verifyEvidence(', from);
+  assert.ok(from >= 0 && to > from);
+  const segment = remote.slice(from, to);
+  assert.doesNotMatch(segment, /resume_or_create_active_audit/);
+  assert.match(segment, /rpc\('sync_audit'/);
+  assert.match(segment, /isActiveUniqueViolation/);
+  const calls = [];
+  const create = new Function(
+    'currentUser', 'client', 'navigator', 'getAccess', 'newId',
+    'AUDIT_SYNC_CORE', 'AUDIT_STORAGE', 'remoteToLocal', 'findRemoteActive',
+    segment + 'return resumeOrCreateActive;'
+  )(
+    async () => ({id:'user-test'}),
+    {rpc:async (name,args) => {
+      calls.push({name,args});
+      return {data:[{id:'AUDIT-TEST'}]};
+    }},
+    {onLine:true}, async () => ({canAudit:true}), () => 'MUT',
+    {publicPayload:() => ({}),isActiveUniqueViolation:() => false},
+    {getDeviceId:async () => 'device-test'}, row => ({auditId:row.id}),
+    async () => null
+  );
+  const result = await create({auditId:'AUDIT-TEST',environmentId:'SALA-TESTE',
+    mutationId:'MUT',status:'DRAFT'});
+  assert.equal(calls.length,1);
+  assert.equal(calls[0].name,'sync_audit');
+  assert.equal(result.audit.auditId,'AUDIT-TEST');
+});
+
+test('sessão não dispara consulta do Supabase de dentro do callback de autenticação', () => {
+  const remote = read('audit-remote.js');
+  const from = remote.indexOf('  function onAuthStateChange(callback) {');
+  const to = remote.indexOf("  window.addEventListener('online'", from);
+  const block = remote.slice(from,to);
+  assert.match(block, /setTimeout\(\(\) => callback\(event, user\), 0\)/);
+  assert.doesNotMatch(block, /sessionUser\(\)/);
+  const tasks = [];
+  let received = [];
+  const observe = new Function('client','setTimeout','queueMicrotask',
+    block + 'return onAuthStateChange;')({
+      auth:{onAuthStateChange(listener){
+        listener('SIGNED_IN',{user:{id:'admin-test'}});
+        return {data:{subscription:{unsubscribe(){}}}};
+      }}
+    }, callback=>tasks.push(callback), queueMicrotask);
+  observe((event,user)=>received.push([event,user?.id]));
+  assert.deepEqual(received,[]);
+  assert.equal(tasks.length,1);
+  tasks[0]();
+  assert.deepEqual(received,[['SIGNED_IN','admin-test']]);
+});
+
+test('consulta simultânea de autorização reutiliza requisição e cache curto', async () => {
+  const remote = read('audit-remote.js');
+  const start = remote.indexOf('  const verifiedAccess = new Map();');
+  const end = remote.indexOf('  async function requestAccount(',start);
+  const code = remote.slice(start,end);
+  let reads = 0;
+  const storage = new Map();
+  const profiles = {select(){return this;},eq(){return this;},
+    abortSignal(){return this;},async maybeSingle(){
+      reads++;
+      return {data:{role:'ADMIN',active:true,review_status:'APPROVED'}};
+    }};
+  const getter = new Function('client','sessionUser','navigator','localStorage',
+    'AbortController','setTimeout','clearTimeout','Date',
+    code + 'return getAccess;')(
+      {from:()=>profiles}, async()=>({id:'user-1'}), {onLine:true},
+      {getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v)},
+      AbortController,setTimeout,clearTimeout,Date
+    );
+  const values = await Promise.all([getter(),getter(),getter()]);
+  assert.equal(reads,1,'Somente uma consulta de perfil deve atingir o servidor');
+  assert.equal(values[0].admin,true);
+  assert.equal((await getter()).canAudit,true);
+  assert.equal(reads,1,'Cache curto deve evitar requisição repetida');
+});
+
+test('não perder edição ativa ao mudar de sala ou consultar histórico', () => {
+  const auditOpen = snippet('  async function openAudit(mapId) {',
+    '  async function openSharedAudit(');
+  const history = snippet('  async function openHistory(mapId) {',
+    '  async function showPublicAudit(');
+  for (const part of [auditOpen,history]) {
+    assert.match(part, /if \(audit && !modal\.hidden\)/);
+    assert.match(part, /await closeModal\(\)/);
+    assert.match(part, /if \(!modal\.hidden\) return/);
+  }
+});
+
+test('novas auditorias verificam ocupação em paralelo e aproveitam a cópia própria', () => {
+  const app = snippet('  async function openAuditLocked(', '  // Exibe os campos efetivamente persistidos');
+  assert.match(app,/const occupancyTask = canCheckRemote/);
+  assert.ok(app.indexOf('const occupancyTask = canCheckRemote') <
+    app.indexOf('ownedRemote = await AUDIT_REMOTE.findRemoteActive'));
+  assert.match(app,/if \(canCheckRemote && !ownedRemote\)/);
+  assert.match(app,/return showActiveDraft\(local, owner, access\)/);
+});
