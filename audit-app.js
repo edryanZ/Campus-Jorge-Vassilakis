@@ -1261,6 +1261,7 @@ const AUDIT_APP = (() => {
   const centerResults = document.getElementById('auditCenterResults');
   const centerSummary = document.getElementById('auditCenterSummary');
   let centerRecords = [];
+  let centerRequestId = 0;
   let centerLoadNote = '';
   let centerIsAdmin = false;
   let centerCanAudit = false;
@@ -1376,20 +1377,26 @@ const AUDIT_APP = (() => {
   }
 
   async function openCenter() {
+    const requestId = ++centerRequestId;
     centerFocus = document.activeElement;
     centerModal.hidden = false;
     document.body.classList.add('audit-open');
     centerSummary.textContent = 'Carregando registros locais…';
     centerResults.replaceChildren();
+    const isCurrent = () => requestId === centerRequestId && !centerModal.hidden;
     try {
-      let access = null;
-      try { access = await AUDIT_REMOTE.getAccess(); }
-      catch (error) { console.warn('[AuditCenter] Autorização indisponível:', error); }
+      let access = currentAccess?.canAudit ? currentAccess : null;
+      if (!access) {
+        try { access = await AUDIT_REMOTE.getAccess(); }
+        catch (error) { console.warn('[AuditCenter] Autorização indisponível:', error); }
+      }
+      if (!isCurrent()) return;
       centerIsAdmin = Boolean(access?.admin);
       centerCanAudit = Boolean(access?.canAudit);
       const owner = access?.canAudit ? await AUDIT_REMOTE.ownerKey() : null;
       const deviceKey = access?.canAudit ? `LOCAL:${await AUDIT_STORAGE.getDeviceId()}` : null;
       const all = access?.canAudit ? await AUDIT_STORAGE.listAudits() : [];
+      if (!isCurrent()) return;
       const localRecords = all.filter(item => {
         if (AUDIT_SYNC_CORE.isRecoveryAudit(item)) return false;
         if (access.admin) return true;
@@ -1397,39 +1404,50 @@ const AUDIT_APP = (() => {
         return recordOwner === owner || (recordOwner === deviceKey && item.ownerId == null);
       });
       const merged = new Map(localRecords.map(item => [item.auditId, item]));
-      centerLoadNote = 'Somente registros locais (sem conexão).';
+      const refresh = () => {
+        if (!isCurrent()) return;
+        centerRecords = [...merged.values()].sort((a, b) =>
+          String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')));
+        renderCenter();
+      };
+      centerLoadNote = navigator.onLine
+        ? 'Registros locais carregados; consultando o Supabase em segundo plano…'
+        : 'Somente registros locais (sem conexão).';
+      refresh(); // Não esperar o servidor para mostrar os registros do navegador.
+      centerSearch.focus();
       if (AUDIT_REMOTE.configured && navigator.onLine) {
-        try {
-          const remote = await AUDIT_REMOTE.listAccessibleAudits();
+        AUDIT_REMOTE.listAccessibleAudits().then(remote => {
+          if (!isCurrent()) return;
           for (const item of remote.items) {
             const existing = merged.get(item.auditId);
-            // Preserva a versao local com alteracoes pendentes; nao grava no IndexedDB.
+            // A central exibe metadados remotos; nunca regrava o IndexedDB.
+            // Dados locais pendentes continuam sendo a versão visível.
             if (!existing) merged.set(item.auditId, item);
-            else if (existing.syncState === 'SYNCED' && Number(item.serverRevision || 0) > Number(existing.serverRevision || 0))
-              merged.set(item.auditId, item);
-            else merged.set(item.auditId, { ...existing, isPublic: Boolean(item.isPublic),
+            else merged.set(item.auditId, { ...existing,
+              isPublic: Boolean(item.isPublic),
               remoteConfirmed: Boolean(item.syncComplete), hasRemote: true });
           }
           centerLoadNote = access?.canAudit
             ? 'Inclui registros autorizados do Supabase e resultados públicos.'
             : 'Consulta livre: somente auditorias publicadas.';
           if (remote.limited) centerLoadNote += ' Consulta limitada aos 1.000 registros mais recentes por origem.';
-        } catch (error) {
-          centerLoadNote = 'Consulta remota indisponível; registros locais preservados.';
+          refresh();
+        }).catch(error => {
+          if (!isCurrent()) return;
+          centerLoadNote = 'Consulta ao servidor indisponível; registros locais preservados.';
           console.warn('[AuditCenter] Falha ao consultar Supabase:', error);
-        }
+          refresh();
+        });
       }
-      centerRecords = [...merged.values()].sort((a, b) =>
-        String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')));
-      if (!centerModal.hidden) renderCenter();
     } catch (error) {
-      centerSummary.textContent = 'Não foi possível carregar as auditorias locais.';
+      if (!isCurrent()) return;
+      centerSummary.textContent = 'Não foi possível carregar as auditorias locais. Seus registros permanecem no navegador.';
       console.error('[AuditCenter]', error);
     }
-    centerSearch.focus();
   }
 
   function closeCenter() {
+    ++centerRequestId;
     centerModal.hidden = true;
     if (modal.hidden && authModal.hidden) document.body.classList.remove('audit-open');
     centerFocus?.focus();
@@ -1464,6 +1482,7 @@ const AUDIT_APP = (() => {
   AUDIT_REMOTE.onAuthStateChange(async (_event, user) => {
     const nextUserId = user?.id || null;
     if (currentSessionUserId && currentSessionUserId !== nextUserId) {
+      ++centerRequestId;
       centerRecords = [];
       centerResults.replaceChildren();
       centerModal.hidden = true;
