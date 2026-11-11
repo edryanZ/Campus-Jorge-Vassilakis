@@ -58,23 +58,54 @@ const AUDIT_APP = (() => {
   async function openAudit(mapId) {
     const target = AUDIT_DATA.getEnvironmentByMapId(mapId);
     if (!target) return;
-    let access;
-    try { access = await AUDIT_REMOTE.getAccess(); }
-    catch (error) { console.warn('[AuditAccess] Falha ao validar autorização:', error); }
-    if (!access?.canAudit) {
-      openAuthModal();
-      authStatus.className = 'auth-status';
-      authStatus.textContent = access?.reviewStatus === 'REJECTED'
-        ? 'Seu acesso de auditor foi recusado ou revogado. Consulte apenas resultados publicados.'
-        : 'Para criar ou continuar uma auditoria, entre com uma conta aprovada pelo administrador.';
-      return;
+    ++historyRequestId; // Uma consulta antiga ao histórico não pode alterar o formulário.
+    environment = target;
+    audit = null;
+    editorUserId = null;
+    openModal();
+    title.textContent = 'Abrindo auditoria';
+    environmentLabel.textContent = `${target.blockName} · ${target.roomNumber ? `Sala ${target.roomNumber}` : target.name}`;
+    content.innerHTML = '<div class="audit-empty"><h3>Verificando sua conta…</h3><p>Procurando primeiro o rascunho já salvo neste dispositivo.</p></div>';
+    saveState.textContent = 'Nenhum dado foi alterado nesta etapa.';
+    try {
+      const access = currentAccess?.canAudit ? currentAccess : await AUDIT_REMOTE.getAccess();
+      if (!access?.canAudit) {
+        const signedInUser = await AUDIT_REMOTE.sessionUser();
+        modal.hidden = true;
+        openAuthModal();
+        authStatus.className = 'auth-status is-error';
+        authStatus.textContent = access?.reviewStatus === 'REJECTED'
+          ? 'O acesso desta conta foi revogado. Consulte o administrador.'
+          : access?.reviewStatus === 'OFFLINE'
+            ? 'Não foi possível confirmar a autorização com o servidor. Reconecte sem limpar os dados do navegador.'
+            : signedInUser
+              ? `A sessão de ${signedInUser.email || 'sua conta'} está aberta, mas a permissão não foi confirmada. Use Minha conta para verificar o acesso.`
+              : 'Entre com uma das contas aprovadas para continuar sua auditoria.';
+        return;
+      }
+      const owner = await AUDIT_REMOTE.ownerKey();
+      const key = `${owner}::${target.environmentId}`;
+      if (openLocks.has(key)) return openLocks.get(key);
+      content.innerHTML = '<div class="audit-empty"><h3>Abrindo a sala…</h3><p>Conferindo seu rascunho. Se esta for uma nova auditoria, será necessário verificar a ocupação no servidor.</p></div>';
+      const task = openAuditLocked(target, owner, access).then(() => {
+        if (!audit && !modal.hidden && title.textContent === 'Abrindo auditoria') {
+          content.innerHTML = '<div class="audit-empty"><h3>Não foi possível abrir a auditoria</h3><p>Nenhum registro foi alterado. Verifique os avisos e tente novamente.</p><button type="button" data-audit-retry>Tentar novamente</button></div>';
+          content.querySelector('[data-audit-retry]')?.addEventListener('click', () => openAudit(mapId));
+        }
+      }).catch(error => {
+        console.error('[AuditOpen] Falha:', error);
+        if (!modal.hidden) {
+          content.innerHTML = `<div class="audit-empty"><h3>Falha ao abrir a auditoria</h3><p>${escapeHtml(error.message || error)}</p><p>Seus registros locais não foram apagados.</p><button type="button" data-audit-retry>Tentar novamente</button></div>`;
+          content.querySelector('[data-audit-retry]')?.addEventListener('click', () => openAudit(mapId));
+        }
+      }).finally(() => openLocks.delete(key));
+      openLocks.set(key, task);
+      return task;
+    } catch (error) {
+      console.error('[AuditAccess] Falha de autorização:', error);
+      content.innerHTML = `<div class="audit-empty"><h3>Falha ao verificar autorização</h3><p>${escapeHtml(error.message || error)}</p><p>O servidor pode estar lento. Nada foi apagado.</p><button type="button" data-access-retry>Tentar novamente</button></div>`;
+      content.querySelector('[data-access-retry]')?.addEventListener('click', () => openAudit(mapId));
     }
-    const owner = await AUDIT_REMOTE.ownerKey();
-    const key = `${owner}::${target.environmentId}`;
-    if (openLocks.has(key)) return openLocks.get(key);
-    const task = openAuditLocked(target, owner, access).finally(() => openLocks.delete(key));
-    openLocks.set(key, task);
-    return task;
   }
 
   async function openSharedAudit(auditId) {
@@ -125,6 +156,11 @@ const AUDIT_APP = (() => {
     if (!local && !owner.startsWith('LOCAL:')) {
       local = await AUDIT_STORAGE.findActive(environment.environmentId, `LOCAL:${await AUDIT_STORAGE.getDeviceId()}`);
     }
+    // Já existe auditoria desta conta neste aparelho: abrir em seguida,
+    // sem obrigar o usuário a esperar uma sequência de requisições remotas.
+    // Conflitos posteriores são preservados pelo motor de sincronização.
+    if (local && local.ownerId === owner && !local.collaborationEditorId)
+      return showActiveDraft(local, owner, access);
     let ownedRemote = null;
     if (AUDIT_REMOTE.configured && navigator.onLine && !access.offline && !owner.startsWith('LOCAL:')) {
       ownedRemote = await AUDIT_REMOTE.findRemoteActive(environment.environmentId);
@@ -203,9 +239,15 @@ const AUDIT_APP = (() => {
         local = await AUDIT_STORAGE.getAudit(error.existingAuditId);
       }
     }
-    audit = local;
+    return showActiveDraft(local, owner, access);
+  }
+
+  async function showActiveDraft(record, owner, access) {
+    if (!record || AUDIT_SYNC_CORE.isRecoveryAudit(record)) return;
+    audit = record;
     editorUserId = owner;
     isDirty = false;
+    ++editGeneration;
     stepIndex = Math.min(audit.currentStep || 0, AUDIT_DATA.STEPS.length - 1);
     if (audit.status === AUDIT_DATA.STATUS.DRAFT || !audit.startedAt) {
       audit.status = AUDIT_DATA.STATUS.IN_PROGRESS;
@@ -215,8 +257,9 @@ const AUDIT_APP = (() => {
     openModal();
     renderStep();
     await saveNow({ scheduleRemote: false });
-    if (AUDIT_REMOTE.configured && navigator.onLine && !access.offline && ['LOCAL_ONLY', 'PENDING', 'ERROR'].includes(audit.syncState)) {
-      AUDIT_REMOTE.scheduleSync(audit);
+    if (AUDIT_REMOTE.configured && navigator.onLine && !access.offline &&
+        ['LOCAL_ONLY', 'PENDING', 'ERROR'].includes(audit.syncState)) {
+      AUDIT_REMOTE.scheduleSync(audit).catch(error => console.warn('[AuditRemote]', error));
     }
   }
 
@@ -564,6 +607,7 @@ const AUDIT_APP = (() => {
     clearTimeout(saveTimer);
     if (audit) {
       try {
+        if (content.querySelector('#auditForm')) captureForm();
         await evidenceSaveFinished;
         // Uma edição pode chegar durante uma gravação assíncrona. Repetir
         // até que o formulário esteja efetivamente persistido.
@@ -579,6 +623,7 @@ const AUDIT_APP = (() => {
       }
       if (AUDIT_REMOTE.configured && navigator.onLine) AUDIT_REMOTE.flushSync(audit.auditId).catch(error => console.warn('[AuditRemote]', error));
     }
+    ++historyRequestId;
     modal.hidden = true;
     if (typeof authModal === 'undefined' || authModal.hidden) {
       if (typeof centerModal === 'undefined' || centerModal.hidden)
@@ -1091,10 +1136,10 @@ const AUDIT_APP = (() => {
       } else {
         authStatus.className = 'auth-status';
         authStatus.textContent = access?.reviewStatus === 'REJECTED'
-          ? 'O acesso de auditor desta conta foi recusado ou revogado. Você ainda pode consultar resultados publicados.'
+          ? `Acesso revogado para ${user.email || 'esta conta'}.`
           : access?.reviewStatus === 'OFFLINE'
-            ? 'Sem conexão para validar a autorização. Conecte-se à internet para continuar.'
-            : 'Conta cadastrada, mas ainda sem autorização para realizar auditorias. Aguarde aprovação do administrador.';
+            ? 'O servidor não confirmou a autorização. Os dados locais permanecem no dispositivo; tente novamente com a conexão restabelecida.'
+            : `A autorização não foi encontrada para ${user.email || 'esta conta'}. Verifique se o e-mail é o aprovado no sistema.`;
       }
     } catch (error) {
       if (generation !== authGeneration) return;
