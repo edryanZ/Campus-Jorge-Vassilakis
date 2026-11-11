@@ -227,27 +227,20 @@ const AUDIT_REMOTE = (() => {
 
   async function resumeOrCreateActive(proposed) {
     const user = await currentUser();
-    if (!client || !user || !navigator.onLine || !(await getAccess())?.canAudit) return { skipped: true, audit: proposed };
+    if (!client || !user || !navigator.onLine || !(await getAccess())?.canAudit)
+      return { skipped: true, audit: proposed };
     const mutationId = proposed.mutationId || newId('MUTATION');
-    let call = await client.rpc('resume_or_create_active_audit', {
+    // O banco original já possui sync_audit() e índice único por ambiente.
+    // Evitar uma chamada à RPC resume_or_create_active_audit ausente no banco,
+    // que adicionava um erro HTTP e uma nova busca a cada nova auditoria.
+    // Em caso de corrida, o índice único impede criar duas auditorias ativas.
+    const call = await client.rpc('sync_audit', {
       p_id: proposed.auditId, p_environment_id: proposed.environmentId,
-      p_private_payload: proposed, p_public_payload: AUDIT_SYNC_CORE.publicPayload(proposed),
+      p_status: proposed.status, p_private_payload: proposed,
+      p_public_payload: AUDIT_SYNC_CORE.publicPayload(proposed),
+      p_completed_at: null, p_is_public: false, p_expected_revision: 0,
       p_mutation_id: mutationId, p_device_id: await AUDIT_STORAGE.getDeviceId()
     });
-    // Compatibilidade com o banco v14: a RPC v15 ainda nao foi migrada.
-    // Verifica novamente se ja existe um rascunho antes de criar; o indice
-    // unico remoto e a recuperacao de 23505 impedem rascunhos duplicados.
-    if (call.error && ['PGRST202', '42883'].includes(String(call.error.code))) {
-      const previous = await findRemoteActive(proposed.environmentId);
-      if (previous) return { resumed: true, audit: previous, compatibilityMode: true };
-      call = await client.rpc('sync_audit', {
-        p_id: proposed.auditId, p_environment_id: proposed.environmentId,
-        p_status: proposed.status, p_private_payload: proposed,
-        p_public_payload: AUDIT_SYNC_CORE.publicPayload(proposed),
-        p_completed_at: null, p_is_public: false, p_expected_revision: 0,
-        p_mutation_id: mutationId, p_device_id: await AUDIT_STORAGE.getDeviceId()
-      });
-    }
     if (call.error) {
       if (AUDIT_SYNC_CORE.isActiveUniqueViolation(call.error)) {
         const existing = await findRemoteActive(proposed.environmentId);
@@ -256,7 +249,7 @@ const AUDIT_REMOTE = (() => {
       throw call.error;
     }
     const row = Array.isArray(call.data) ? call.data[0] : call.data;
-    if (!row?.id) throw new Error('O Supabase não confirmou a retomada ou criação da auditoria.');
+    if (!row?.id) throw new Error('O Supabase não confirmou a criação da auditoria.');
     return { resumed: row.id !== proposed.auditId, audit: remoteToLocal(row) };
   }
 
@@ -667,10 +660,20 @@ const AUDIT_REMOTE = (() => {
     }
   }
   function onAuthStateChange(callback) {
-    if (!client) { queueMicrotask(() => callback('UNCONFIGURED', null)); return () => {}; }
-    const sub = client.auth.onAuthStateChange((event, session) => callback(event, session?.user || null));
-    sessionUser().then(user => callback('INITIAL', user));
-    return () => sub.data.subscription.unsubscribe();
+    if (!client) {
+      queueMicrotask(() => callback('UNCONFIGURED', null));
+      return () => {};
+    }
+    // A Supabase alerta que aguardar chamadas da própria API dentro
+    // do callback de autenticação pode bloquear o lock de sessão.
+    // Agendar para depois do evento evita travar login e retomada da auditoria.
+    const subscription = client.auth.onAuthStateChange((event, session) => {
+      const user = session?.user || null;
+      setTimeout(() => callback(event, user), 0);
+    });
+    sessionUser().then(user => setTimeout(() => callback('INITIAL', user), 0))
+      .catch(error => console.warn('[AuditAuth] Leitura inicial de sessão falhou:', error));
+    return () => subscription.data.subscription.unsubscribe();
   }
 
   window.addEventListener('online', () => syncPending().catch(error => console.error('[AuditRemote]', error)));
