@@ -58,6 +58,12 @@ const AUDIT_APP = (() => {
   async function openAudit(mapId) {
     const target = AUDIT_DATA.getEnvironmentByMapId(mapId);
     if (!target) return;
+    // Se outra auditoria estiver aberta, confirmar seu salvamento antes
+    // de trocar o conteúdo do modal e o objeto ativo.
+    if (audit && !modal.hidden) {
+      await closeModal();
+      if (!modal.hidden) return;
+    }
     ++historyRequestId; // Uma consulta antiga ao histórico não pode alterar o formulário.
     environment = target;
     audit = null;
@@ -329,6 +335,10 @@ const AUDIT_APP = (() => {
   async function openHistory(mapId) {
     const target = AUDIT_DATA.getEnvironmentByMapId(mapId);
     if (!target) return;
+    if (audit && !modal.hidden) {
+      await closeModal();
+      if (!modal.hidden) return;
+    }
     const requestId = ++historyRequestId;
     environment = target;
     audit = null;
