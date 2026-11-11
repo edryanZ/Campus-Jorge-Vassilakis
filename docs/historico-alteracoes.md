@@ -37,3 +37,17 @@ Relatório complementar: `docs/revisao-sincronizacao-v16-2-2026-10-28.md`.
 - `tests/auditoria-sync-policies.test.cjs` adicionado; GitHub Actions Node 22 configurado apenas na branch de correções.
 - Cache atualizado para v16.2.6.
 - Proteções testadas com dados fictícios, sem mutação da Sala 1 real. Ver relatório de revisão.
+
+## 2026-11-11 — Revisão v16.3: acesso rápido, histórico completo e preservação de dados
+
+- O botão de auditoria abre feedback imediato de carregamento e permite retomar o rascunho já armazenado no dispositivo sem aguardar toda a sequência de consultas remotas.
+- Para iniciar uma auditoria nova, a consulta de ocupação ocorre paralelamente à busca do rascunho remoto, preservando as verificações de unicidade e participação.
+- Removida a tentativa recorrente de executar a RPC ausente `resume_or_create_active_audit` no Supabase original; novas auditorias usam `sync_audit` e o índice único existente por ambiente.
+- Login não espera upload de pendências; eventos de autenticação são tratados após o callback do SDK, evitando bloqueio da sessão; consultas de perfil simultâneas são compartilhadas, com cache positivo curto, revalidação explícita e timeout.
+- Histórico e Central exibem primeiro dados locais; o servidor é consultado em segundo plano, sem mesclar automaticamente rascunhos ou apagar alterações locais. Histórico distingue versão local e revisão do Supabase.
+- Consulta do IndexedDB otimizada com índices por ambiente e auditoria, incluindo recuperação após bloqueio de abertura em outra aba.
+- Fechamento e troca de tela capturam alterações do formulário, aguardam gravação e preservam evidências pendentes.
+- Renovado cache PWA e acrescentados testes de abertura, RLS, autorização, concorrência, histórico, documentos e preservação local.
+- As auditorias reais no banco do campus não foram modificadas nesta rodada. As Salas 2 e 16 permaneciam na revisão 3, com apenas identificação sincronizada, na última verificação. Qualquer dado posterior deve ser conferido no dispositivo original.
+- Acesso privado ao domínio de produção exige configuração de Deployment Protection na Vercel; renomear o domínio, isoladamente, não restringe o público.
+- Validação com browser real, dispositivo e conta autorizada é exigida antes de considerar a recuperação dos dados concluída.
