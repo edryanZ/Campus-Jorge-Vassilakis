@@ -164,7 +164,7 @@ test('falha temporária do Supabase mantém acesso local previamente autorizado'
     from() {
       return { select() {
         return { eq() {
-          return { async maybeSingle() {
+          return { abortSignal() { return this; }, async maybeSingle() {
             if (state === 'server-down') return {
               data: null, error: { message: 'Database temporarily unavailable' }
             };
@@ -196,11 +196,11 @@ test('falha temporária do Supabase mantém acesso local previamente autorizado'
   assert.equal(approved.canAudit, true);
   assert.equal(approved.offline, false);
   state = 'server-down';
-  const cached = await remote.getAccess();
+  const cached = await remote.getAccess({ forceRefresh: true });
   assert.equal(cached.canAudit, true);
   assert.equal(cached.offline, true);
   state = 'revoked';
-  const revoked = await remote.getAccess();
+  const revoked = await remote.getAccess({ forceRefresh: true });
   assert.equal(revoked.canAudit, false);
 });
 
