@@ -63,7 +63,7 @@ const AUDIT_REMOTE = (() => {
     approvedLocalAdoptions.set(record.auditId, user.id);
     return true;
   }
-  async function getAccess() {
+  async function getAccess({ forceRefresh = false } = {}) {
     if (!client) return null;
     const user = await sessionUser();
     if (!user) return null;
@@ -83,7 +83,7 @@ const AUDIT_REMOTE = (() => {
     // Evita várias leituras simultâneas do mesmo perfil e permite abrir
     // rascunhos autorizados rapidamente, sem cache longo de permissões.
     const recent = verifiedAccess.get(user.id);
-    if (recent?.canAudit && !recent.offline && recent.checkedAt > Date.now() - 4000) return recent;
+    if (!forceRefresh && recent?.canAudit && !recent.offline && recent.checkedAt > Date.now() - 4000) return recent;
     if (accessInFlight.has(user.id)) return accessInFlight.get(user.id);
     const task = (async () => {
       let data;
