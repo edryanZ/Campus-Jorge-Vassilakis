@@ -40,11 +40,20 @@ const AUDIT_STORAGE = (() => {
       };
       request.onsuccess = () => {
         const db = request.result;
-        db.onversionchange = () => db.close();
+        db.onversionchange = () => {
+          db.close();
+          databasePromise = null; // Permite reabrir após uma atualização em outra aba.
+        };
         resolve(db);
       };
-      request.onerror = () => reject(request.error);
-      request.onblocked = () => reject(new Error('A atualização do banco local foi bloqueada por outra aba aberta.'));
+      request.onerror = () => {
+        databasePromise = null; // Não manter uma falha permanente na sessão.
+        reject(request.error);
+      };
+      request.onblocked = () => {
+        databasePromise = null;
+        reject(new Error('A atualização do banco local foi bloqueada por outra aba aberta.'));
+      };
     });
     return databasePromise;
   }
@@ -192,14 +201,27 @@ const AUDIT_STORAGE = (() => {
   const saveConflict = conflict => requestResult(STORES.CONFLICTS, 'readwrite', store => store.put(structuredClone(conflict)));
 
   async function listByEnvironment(environmentId) {
-    const all = await listAudits();
-    return all.filter(item => item.environmentId === environmentId)
-      .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
+    // Índice por ambiente: evita varrer todas as salas em cada clique.
+    let items;
+    try {
+      items = await requestResult(STORES.AUDITS, 'readonly',
+        store => store.index('environmentId').getAll(environmentId));
+    } catch (error) {
+      // Compatibilidade com bases antigas que não possuam o índice.
+      if (error.name !== 'NotFoundError') throw error;
+      items = (await listAudits()).filter(item => item.environmentId === environmentId);
+    }
+    return items.sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
   }
 
   async function listEvidenceByAudit(auditId) {
-    const all = await listEvidence();
-    return all.filter(item => item.auditId === auditId);
+    try {
+      return await requestResult(STORES.EVIDENCE, 'readonly',
+        store => store.index('auditId').getAll(auditId));
+    } catch (error) {
+      if (error.name !== 'NotFoundError') throw error;
+      return (await listEvidence()).filter(item => item.auditId === auditId);
+    }
   }
 
   async function findActive(environmentId, owner) {
