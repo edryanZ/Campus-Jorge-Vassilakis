@@ -162,7 +162,14 @@ const AUDIT_APP = (() => {
     if (local && local.ownerId === owner && !local.collaborationEditorId)
       return showActiveDraft(local, owner, access);
     let ownedRemote = null;
-    if (AUDIT_REMOTE.configured && navigator.onLine && !access.offline && !owner.startsWith('LOCAL:')) {
+    const canCheckRemote = AUDIT_REMOTE.configured && navigator.onLine &&
+      !access.offline && !owner.startsWith('LOCAL:');
+    // A ocupação e o rascunho existente são consultas independentes. Rodá-las
+    // em paralelo evita duas esperas sequenciais na primeira visita à sala.
+    const occupancyTask = canCheckRemote
+      ? AUDIT_REMOTE.listActiveOccupancy().then(value => ({ value }), error => ({ error }))
+      : null;
+    if (canCheckRemote) {
       ownedRemote = await AUDIT_REMOTE.findRemoteActive(environment.environmentId);
       if (ownedRemote && local && ownedRemote.auditId !== local.auditId) {
         await AUDIT_REMOTE.preserveConflict(local, ownedRemote, 'ACTIVE_IDENTITY');
@@ -173,17 +180,16 @@ const AUDIT_APP = (() => {
         local = ownedRemote;
       }
     }
-    if (AUDIT_REMOTE.configured && navigator.onLine && !access.offline && !owner.startsWith('LOCAL:')) {
+    if (canCheckRemote && !ownedRemote) {
       // Mesmo que haja rascunho local legado, a sala ocupada por outra
       // conta nunca pode ser assumida ou sincronizada automaticamente.
       // Não oferecer criação local quando há auditoria ativa de outro usuário.
-      let occupancy;
-      try {
-        occupancy = await AUDIT_REMOTE.listActiveOccupancy();
-      } catch (error) {
+      const checked = await occupancyTask;
+      if (checked.error) {
         window.alert('Não foi possível verificar se já existe uma auditoria ativa nesta sala. Por segurança, tente novamente quando a consulta estiver disponível.');
         return;
       }
+      const occupancy = checked.value;
       const occupied = occupancy.find(item => item.environment_id === environment.environmentId);
       if (occupied && ownedRemote?.auditId !== occupied.audit_id &&
           !(local?.auditId === occupied.audit_id && local.ownerId === owner)) {
