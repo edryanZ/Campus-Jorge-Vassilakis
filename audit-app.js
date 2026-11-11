@@ -207,6 +207,59 @@ const AUDIT_APP = (() => {
     }
   }
 
+  // Exibe os campos efetivamente persistidos, sem gravar, sincronizar ou
+  // modificar o rascunho. O resumo do histórico não é um relatório de dados.
+  function renderLocalAuditDetails(item, mapId) {
+    if (!item) return;
+    title.textContent = 'Dados preenchidos na auditoria';
+    const sections = [
+      ['identification', 'Identificação'], ['lighting', 'Iluminação'],
+      ['airConditioning', 'Climatização'], ['equipment', 'Equipamentos'],
+      ['waterWaste', 'Água e resíduos'], ['conditions', 'Condições ambientais'],
+      ['infrastructure', 'Infraestrutura'], ['nonConformities', 'Não conformidades']
+    ];
+    const nameMap = {
+      date: 'Data', startTime: 'Hora de início', inspector: 'Auditor',
+      responsible: 'Responsável', notes: 'Observações', total: 'Total',
+      led: 'LED', fluorescent: 'Fluorescentes', working: 'Funcionando',
+      defective: 'Defeituosas', other: 'Outras', units: 'Unidades',
+      hasAC: 'Possui ar-condicionado', temperature: 'Temperatura (°C)',
+      noiseDb: 'Ruído (dB)', lux: 'Iluminância (lux)',
+      thermalComfort: 'Conforto térmico', ventilation: 'Ventilação',
+      naturalLight: 'Luz natural', source: 'Fonte da informação',
+      installedPower: 'Potência instalada', estimatedConsumption: 'Consumo estimado',
+      category: 'Categoria', priority: 'Prioridade',
+      description: 'Descrição', recommendation: 'Recomendação',
+      location: 'Localização', deadline: 'Prazo'
+    };
+    const stringify = value => typeof value === 'boolean' ? (value ? 'Sim' : 'Não')
+      : typeof value === 'object' ? JSON.stringify(value) : String(value);
+    const visible = value => value !== '' && value !== null && value !== undefined;
+    const renderValues = values => Object.entries(values || {})
+      .filter(([key, value]) => visible(value) && key !== 'nonConformities')
+      .map(([key, value]) => {
+        const formatted = Array.isArray(value)
+          ? value.map((entry, index) => `<div class="public-audit-field"><dt>Item ${index + 1}</dt><dd>${escapeHtml(stringify(entry))}</dd></div>`).join('')
+          : `<div class="public-audit-field"><dt>${escapeHtml(nameMap[key] || key)}</dt><dd>${escapeHtml(stringify(value))}</dd></div>`;
+        return formatted;
+      }).join('');
+    const blocks = sections.map(([key, label]) => {
+      const data = key === 'nonConformities' ? item.nonConformities : item.data?.[key];
+      const rows = Array.isArray(data)
+        ? data.map((entry, index) => `<section class="public-audit-section"><h4>Registro ${index + 1}</h4><dl>${renderValues(entry)}</dl></section>`).join('')
+        : data && typeof data === 'object' ? `<dl>${renderValues(data)}</dl>` : '';
+      return rows ? `<section class="public-audit-section"><h3>${label}</h3>${rows}</section>` : '';
+    }).filter(Boolean);
+    content.innerHTML = `<div class="audit-history">
+      <p class="audit-note">Consulta somente leitura dos dados armazenados neste navegador. A sincronização remota é verificada separadamente.</p>
+      <p class="sync-badge">${escapeHtml(syncLabel(item.syncState))} · revisão remota ${Number(item.serverRevision || 0)}</p>
+      ${blocks.length ? blocks.join('') : '<p>Nenhum campo preenchido encontrado nesta cópia.</p>'}
+      <p>${Number(item.evidenceIds?.length || 0)} fotografia(s) vinculada(s) no registro local.</p>
+      <button class="audit-secondary" type="button" data-back-history>Voltar ao histórico</button>
+    </div>`;
+    content.querySelector('[data-back-history]')?.addEventListener('click', () => openHistory(mapId));
+  }
+
   async function openHistory(mapId) {
     environment = AUDIT_DATA.getEnvironmentByMapId(mapId);
     if (!environment) return;
@@ -217,11 +270,12 @@ const AUDIT_APP = (() => {
     environmentLabel.textContent = `${environment.blockName} · ${environment.roomNumber ? `Sala ${environment.roomNumber}` : environment.name}`;
     content.innerHTML = '<div class="audit-empty"><h3>Carregando histórico…</h3><p>Consultando os registros deste ambiente.</p></div>';
     try {
-    let access = null;
-    try { access = await AUDIT_REMOTE.getAccess(); }
-    catch (error) { console.warn('[AuditAccess] Histórico privado indisponível:', error); }
-    if (access?.canAudit && AUDIT_REMOTE.configured && navigator.onLine) {
-      try { await AUDIT_REMOTE.pullRemote(); } catch (error) { console.warn('[AuditRemote] Histórico remoto indisponível.', error); }
+    // Consultar somente cópias locais ao abrir o histórico: não depender da
+    // rede e jamais mesclar automaticamente um servidor desatualizado.
+    let access = currentAccess;
+    if (!access?.canAudit) {
+      try { access = await AUDIT_REMOTE.getAccess(); }
+      catch (error) { console.warn('[AuditAccess] Histórico privado indisponível:', error); }
     }
     const owner = access?.canAudit ? await AUDIT_REMOTE.ownerKey() : null;
     const deviceKey = owner ? `LOCAL:${await AUDIT_STORAGE.getDeviceId()}` : null;
@@ -234,10 +288,8 @@ const AUDIT_APP = (() => {
       ? await AUDIT_STORAGE.listRecoveries(environment.environmentId)
       : { legacy: [], conflicts: [] };
     let publicItems = [];
-    if (AUDIT_REMOTE.configured && navigator.onLine) {
-      try { publicItems = await AUDIT_REMOTE.listPublic(environment.environmentId); }
-      catch (error) { console.warn('[AuditRemote] Consulta pública indisponível.', error); }
-    }
+    // Resultados públicos podem ser consultados separadamente. Não bloquear
+    // o histórico privado para aguardar a resposta do Supabase.
     const localIds = new Set(localItems.map(item => item.auditId));
     const items = [...localItems, ...publicItems.filter(item => !localIds.has(item.auditId))]
       .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
@@ -248,13 +300,19 @@ const AUDIT_APP = (() => {
       <small class="sync-badge">${syncLabel(item.syncState)}</small>
       ${evidenceStatusMarkup(evidenceByAudit.get(item.auditId))}
       ${item.syncState === 'CONFLICT' ? '<small class="sync-badge">Revisão necessária: versões local e remota foram preservadas</small>' : ''}
+      ${!item.publicOnly ? `<button type="button" data-audit-details="${escapeHtml(item.auditId)}">Ver dados preenchidos</button>` : ''}
       ${item.publicOnly || item.isPublic ? `<button type="button" data-public-id="${escapeHtml(item.auditId)}">Ver resultados públicos</button>` : ''}
       ${item.status !== AUDIT_DATA.STATUS.COMPLETED && !item.publicOnly &&
         (AUDIT_SYNC_CORE.ownerKey(item) === owner || AUDIT_SYNC_CORE.ownerKey(item) === deviceKey)
           ? `<button type="button" data-resume="${escapeHtml(item.auditId)}">Continuar auditoria</button>` : ''}</article>`).join('')}
       ${recoveries.legacy.map(item => `<article><strong>Cópia de recuperação preservada</strong><span>${new Date(item.updatedAt).toLocaleString('pt-BR')}</span><small class="sync-badge">Não é um rascunho ativo e não será sincronizada automaticamente</small></article>`).join('')}
       ${recoveries.conflicts.map(item => `<article><strong>Conflito aguardando resolução</strong><span>${new Date(item.createdAt).toLocaleString('pt-BR')}</span><small class="sync-badge">${escapeHtml(item.reason)} · ambas as versões e o manifesto de evidências foram preservados</small></article>`).join('')}</div>`
-      : '<div class="audit-empty"><h3>Nenhuma auditoria registrada</h3><p>O histórico deste ambiente ainda está vazio.</p></div>';
+      : '<div class="audit-empty"><h3>Nenhum registro local disponível</h3><p>Esta consulta rápida mostra as cópias salvas neste navegador. Se você já auditou esta sala, mantenha os dados do navegador e confira sua conta e sincronização antes de iniciar outro registro.</p></div>';
+    content.querySelectorAll('[data-audit-details]').forEach(button =>
+      button.addEventListener('click', async () => {
+        const item = localItems.find(record => record.auditId === button.dataset.auditDetails);
+        if (item) renderLocalAuditDetails(item, mapId);
+      }));
     content.querySelectorAll('[data-public-id]').forEach(button =>
       button.addEventListener('click', () => showPublicAudit(button.dataset.publicId)));
     content.querySelectorAll('[data-resume]').forEach(button => button.addEventListener('click', async () => {
