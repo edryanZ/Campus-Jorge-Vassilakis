@@ -577,6 +577,31 @@ const AUDIT_REMOTE = (() => {
       limited: (published.data?.length || 0) === 1000 || (user && items.length >= 1000) };
   }
 
+  // Histórico privado: consulta somente leitura e limitada ao ambiente.
+  // A segurança dos registros permanece a cargo do RLS do Supabase.
+  async function listPrivateHistory(environmentId) {
+    if (!client || !navigator.onLine || !(await getAccess())?.canAudit) return [];
+    const result = await client.from('audits')
+      .select('id,environment_id,status,updated_at,completed_at,owner_id,server_revision,sync_complete')
+      .eq('environment_id', environmentId).order('updated_at', { ascending: false }).limit(50);
+    if (result.error) throw result.error;
+    return (result.data || []).map(row => ({
+      auditId: row.id, environmentId: row.environment_id, status: row.status,
+      updatedAt: row.updated_at, completedAt: row.completed_at, ownerId: row.owner_id,
+      serverRevision: row.server_revision, syncComplete: row.sync_complete,
+      syncState: row.sync_complete ? 'SYNCED' : 'PENDING', remoteOnly: true
+    }));
+  }
+
+  async function getPrivateHistoryRecord(auditId) {
+    if (!client || !navigator.onLine || !(await getAccess())?.canAudit)
+      throw new Error('Entre com uma conta de auditor autorizada e conectada para consultar o servidor.');
+    const result = await client.from('audits').select('*').eq('id', auditId).maybeSingle();
+    if (result.error) throw result.error;
+    if (!result.data) throw new Error('Registro não encontrado ou sem permissão de acesso.');
+    return remoteToLocal(result.data);
+  }
+
   async function listPublic(environmentId) {
     if (!client || !navigator.onLine) return [];
     const result = await client.from('published_audits').select('id,environment_id,status,public_payload,completed_at,updated_at,server_revision').eq('environment_id', environmentId).order('completed_at', { ascending: false });
@@ -621,10 +646,10 @@ const AUDIT_REMOTE = (() => {
     if (!client) throw new Error('Supabase ainda não foi configurado.');
     const result = await client.auth.signInWithPassword({ email, password });
     if (result.error) throw result.error;
-    if ((await getAccess())?.canAudit) {
-      try { await syncPending(); }
-      catch (error) { console.warn('[AuditRemote] Login concluído; sincronização pendente:', error); }
-    }
+    // Nunca bloquear o login aguardando uploads ou download de auditorias.
+    // A validação de autorização ocorre na interface e na rotina de sincronização.
+    setTimeout(() => syncPending().catch(error =>
+      console.warn('[AuditRemote] Login concluído; sincronização pendente:', error)), 0);
     return result.data.user;
   }
   async function signOut() {
@@ -652,7 +677,7 @@ const AUDIT_REMOTE = (() => {
   return Object.freeze({
     configured, client, currentUser, sessionUser, ownerKey, signIn, signOut, requestAccount, getAccess, approveLegacyAdoption, listAccessRequests, reviewAccessRequest, setPublication, getPublishedAudit, onAuthStateChange,
     findRemoteActive, listActiveOccupancy, requestAuditParticipation, listMyParticipation, listAuditParticipationRequests, reviewAuditParticipation, getSharedAudit, resumeOrCreateActive, syncAudit, scheduleSync, flushSync, syncPending,
-    pullRemote, listPublic, listAccessibleAudits, preserveConflict
+    pullRemote, listPublic, listAccessibleAudits, listPrivateHistory, getPrivateHistoryRecord, preserveConflict
   });
 })();
 
