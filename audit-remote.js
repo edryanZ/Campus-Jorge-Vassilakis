@@ -50,6 +50,7 @@ const AUDIT_REMOTE = (() => {
   }
 
   const verifiedAccess = new Map();
+  const accessInFlight = new Map();
   // Apenas rascunhos anônimos autorizados explicitamente pelo auditor atual.
   const approvedLocalAdoptions = new Map();
   async function approveLegacyAdoption(record) {
@@ -73,37 +74,50 @@ const AUDIT_REMOTE = (() => {
         try { saved = JSON.parse(localStorage.getItem(key) || 'null'); }
         catch (_error) { saved = null; }
       }
-      // A autorização offline vale no máximo 24h, mesmo quando a rede está
-      // conectada mas o servidor está temporariamente indisponível.
+      // Permite continuidade local por até 24h após autorização comprovada.
       if (saved?.active && saved?.canAudit && saved?.checkedAt > Date.now() - 86400000)
         return { ...saved, offline: true };
       return { active: false, role: null, reviewStatus: 'OFFLINE', canAudit: false, admin: false, offline: true };
     };
     if (!navigator.onLine) return cachedOffline();
-    let data;
-    try {
-      const response = await client.from('profiles')
-        .select('role,active,display_name,review_status')
-        .eq('user_id', user.id).maybeSingle();
-      if (response.error) throw response.error;
-      data = response.data;
-    } catch (error) {
-      // O Supabase pode estar pausado mesmo com Wi-Fi/4G conectado. Nesse
-      // caso, permitir apenas continuação LOCAL previamente autorizada.
-      const cached = cachedOffline();
-      if (cached.canAudit) return cached;
-      throw error;
-    }
-    const result = {
-      userId: user.id, role: data?.role || null, active: Boolean(data?.active),
-      displayName: data?.display_name || '', reviewStatus: data?.review_status || 'PENDING',
-      canAudit: Boolean(data?.active && ['ADMIN', 'AUDITOR'].includes(data.role)),
-      admin: Boolean(data?.active && data.role === 'ADMIN'),
-      checkedAt: Date.now(), offline: false
-    };
-    verifiedAccess.set(user.id, result);
-    try { localStorage.setItem(key, JSON.stringify(result)); } catch (_error) { /* Armazenamento indisponivel. */ }
-    return result;
+    // Evita várias leituras simultâneas do mesmo perfil e permite abrir
+    // rascunhos autorizados rapidamente, sem cache longo de permissões.
+    const recent = verifiedAccess.get(user.id);
+    if (recent?.canAudit && !recent.offline && recent.checkedAt > Date.now() - 4000) return recent;
+    if (accessInFlight.has(user.id)) return accessInFlight.get(user.id);
+    const task = (async () => {
+      let data;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 7000);
+      try {
+        const response = await client.from('profiles')
+          .select('role,active,display_name,review_status')
+          .eq('user_id', user.id).abortSignal(controller.signal).maybeSingle();
+        if (response.error) throw response.error;
+        data = response.data;
+      } catch (error) {
+        // Internet conectada não garante que o Supabase esteja acessível.
+        // Sem confirmação recente, não conceder acesso privado.
+        const cached = cachedOffline();
+        if (cached.canAudit) return cached;
+        throw error;
+      } finally {
+        clearTimeout(timeout);
+      }
+      const result = {
+        userId: user.id, role: data?.role || null, active: Boolean(data?.active),
+        displayName: data?.display_name || '', reviewStatus: data?.review_status || 'PENDING',
+        canAudit: Boolean(data?.active && ['ADMIN', 'AUDITOR'].includes(data.role)),
+        admin: Boolean(data?.active && data.role === 'ADMIN'),
+        checkedAt: Date.now(), offline: false
+      };
+      verifiedAccess.set(user.id, result);
+      try { localStorage.setItem(key, JSON.stringify(result)); } catch (_error) { /* Armazenamento indisponível. */ }
+      return result;
+    })();
+    accessInFlight.set(user.id, task);
+    try { return await task; }
+    finally { if (accessInFlight.get(user.id) === task) accessInFlight.delete(user.id); }
   }
 
   async function requestAccount(displayName, email, password) {
@@ -652,6 +666,7 @@ const AUDIT_REMOTE = (() => {
     if (result.error) throw result.error;
     if (user) {
       verifiedAccess.delete(user.id);
+      accessInFlight.delete(user.id);
       for (const [auditId, adoptedBy] of approvedLocalAdoptions) {
         if (adoptedBy === user.id) approvedLocalAdoptions.delete(auditId);
       }
@@ -671,8 +686,7 @@ const AUDIT_REMOTE = (() => {
       const user = session?.user || null;
       setTimeout(() => callback(event, user), 0);
     });
-    sessionUser().then(user => setTimeout(() => callback('INITIAL', user), 0))
-      .catch(error => console.warn('[AuditAuth] Leitura inicial de sessão falhou:', error));
+    // O SDK emite INITIAL_SESSION; não consultar a sessão uma segunda vez.
     return () => subscription.data.subscription.unsubscribe();
   }
 
