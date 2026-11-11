@@ -152,3 +152,66 @@ test('histórico abre janela antes da consulta assíncrona e informa falhas', ()
   assert.match(fn, /Histórico indisponível/);
   assert.match(fn, /Tentar novamente/);
 });
+
+test('login responde antes de sincronizar os rascunhos pendentes', async () => {
+  const remote = read('audit-remote.js');
+  const start = remote.indexOf('  async function signIn(email, password) {');
+  const end = remote.indexOf('  async function signOut()', start);
+  assert.ok(start >= 0 && end > start);
+  const tasks = [];
+  let syncCount = 0;
+  const login = new Function('client', 'setTimeout', 'syncPending',
+    remote.slice(start, end) + 'return signIn;')(
+      { auth: { async signInWithPassword() { return { data: { user: { id: 'test-user' } } }; } } },
+      callback => { tasks.push(callback); },
+      async () => { syncCount += 1; }
+    );
+  const user = await login('exemplo@unir.br', 'senha-de-teste');
+  assert.equal(user.id, 'test-user');
+  assert.equal(syncCount, 0, 'Não deve aguardar a sincronização antes de responder ao login');
+  assert.equal(tasks.length, 1);
+  await tasks[0]();
+  assert.equal(syncCount, 1);
+});
+
+test('histórico usa consulta remota somente leitura e distingue cópia local', () => {
+  const fn = snippet('  async function openHistory(mapId) {', '  async function showPublicAudit(');
+  assert.match(fn, /listByEnvironment\(target\.environmentId\)/);
+  assert.match(fn, /listPrivateHistory\(target\.environmentId\)/);
+  assert.match(fn, /getPrivateHistoryRecord/);
+  assert.match(fn, /Ver dados preenchidos/);
+  assert.match(fn, /Ver dados no Supabase/);
+  assert.doesNotMatch(fn, /pullRemote\(|saveAudit\(/,
+    'Abrir o histórico não pode modificar automaticamente dados locais');
+  assert.ok(fn.indexOf('renderHistory();') < fn.indexOf('AUDIT_REMOTE.listPrivateHistory'),
+    'Os registros locais precisam aparecer antes da consulta remota');
+  assert.match(fn, /if \(!access\?\.canAudit\)/,
+    'Dados privados devem exigir autorização');
+});
+
+test('reabrir rascunho próprio não espera consulta remota', () => {
+  const fn = snippet('  async function openAuditLocked(', '  // Exibe os campos efetivamente persistidos');
+  assert.match(fn, /local\.ownerId === owner/);
+  assert.ok(fn.indexOf('return showActiveDraft(local, owner, access);') < fn.indexOf('await AUDIT_REMOTE.findRemoteActive('));
+  assert.match(fn, /AUDIT_REMOTE\.listActiveOccupancy\(/,
+    'Novas auditorias continuam verificando a ocupação no servidor');
+});
+
+test('fechamento grava alterações visíveis e preserva a fila local', () => {
+  const fn = snippet('  async function closeModal()', '  function renderStep()');
+  assert.match(fn, /captureForm\(\)/);
+  assert.match(fn, /await evidenceSaveFinished/);
+  assert.match(fn, /saveNow\(\{ scheduleRemote: false \}\)/);
+  assert.match(fn, /if \(isDirty\) throw/,
+    'Não fechar com mudanças ainda não salvas');
+});
+
+test('histórico remoto é protegido por perfil e RLS, sem mesclagem automática', () => {
+  const remote = read('audit-remote.js');
+  const a = remote.slice(remote.indexOf('  async function listPrivateHistory('), remote.indexOf('  async function listPublic('));
+  assert.match(a, /getAccess\(\)/);
+  assert.match(a, /\.eq\('environment_id', environmentId\)/);
+  assert.match(a, /\.limit\(50\)/);
+  assert.match(a, /\.from\('audits'\)\.select\('\*'\)/);
+  assert.doesNotMatch(a, /AUDIT_STORAGE\.saveAudit|pullRemote\(/);
+});
