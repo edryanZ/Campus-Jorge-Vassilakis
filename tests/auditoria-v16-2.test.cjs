@@ -215,3 +215,32 @@ test('histórico remoto é protegido por perfil e RLS, sem mesclagem automática
   assert.match(a, /\.from\('audits'\)\.select\('\*'\)/);
   assert.doesNotMatch(a, /AUDIT_STORAGE\.saveAudit|pullRemote\(/);
 });
+
+test('consultas IndexedDB usam índice por sala e por auditoria, sem apagar conteúdo', () => {
+  const storage = read('audit-storage.js');
+  const rooms = storage.slice(storage.indexOf('  async function listByEnvironment('),
+    storage.indexOf('  async function findActive('));
+  assert.match(rooms, /store\.index\('environmentId'\)\.getAll\(environmentId\)/);
+  assert.match(rooms, /store\.index\('auditId'\)\.getAll\(auditId\)/);
+  assert.match(rooms, /NotFoundError/);
+  assert.match(storage, /databasePromise = null/);
+  assert.doesNotMatch(rooms, /\.clear\(|\.delete\(/);
+});
+
+test('Central mostra dados locais antes de consultar o Supabase', () => {
+  const center = snippet('  async function openCenter() {', '  function closeCenter() {');
+  assert.match(center, /const requestId = \+\+centerRequestId/);
+  assert.match(center, /refresh\(\); \/\/ Não esperar o servidor/);
+  assert.ok(center.indexOf('refresh(); // Não esperar o servidor') <
+    center.indexOf('AUDIT_REMOTE.listAccessibleAudits().then('));
+  assert.doesNotMatch(center, /await AUDIT_REMOTE\.listAccessibleAudits\(/);
+  assert.doesNotMatch(center, /AUDIT_STORAGE\.saveAudit\(/);
+});
+
+test('o editor preserva a distinção entre falha de acesso e conta revogada', () => {
+  const fn = snippet('  async function openAudit(mapId) {', '  async function openSharedAudit(');
+  assert.match(fn, /Verificando sua conta/);
+  assert.match(fn, /A sessão de/);
+  assert.match(fn, /acesso desta conta foi revogado/i);
+  assert.match(fn, /Falha ao verificar autorização/);
+});
