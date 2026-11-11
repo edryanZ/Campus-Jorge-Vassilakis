@@ -220,84 +220,205 @@ const AUDIT_APP = (() => {
     }
   }
 
+  // Exibe os campos efetivamente persistidos, sem gravar, sincronizar ou
+  // modificar o rascunho. O resumo do histórico não é um relatório de dados.
+  function renderLocalAuditDetails(item, mapId, source = 'local') {
+    if (!item) return;
+    title.textContent = source === 'remote' ? 'Dados no Supabase' : 'Dados neste dispositivo';
+    const sections = [
+      ['identification', 'Identificação'], ['lighting', 'Iluminação'],
+      ['airConditioning', 'Climatização'], ['equipment', 'Equipamentos'],
+      ['waterWaste', 'Água e resíduos'], ['conditions', 'Condições ambientais'],
+      ['infrastructure', 'Infraestrutura'], ['nonConformities', 'Não conformidades']
+    ];
+    const nameMap = {
+      date: 'Data', startTime: 'Hora de início', inspector: 'Auditor',
+      responsible: 'Responsável', notes: 'Observações', total: 'Total',
+      led: 'LED', fluorescent: 'Fluorescentes', working: 'Funcionando',
+      defective: 'Defeituosas', other: 'Outras', units: 'Unidades',
+      hasAC: 'Possui ar-condicionado', temperature: 'Temperatura (°C)',
+      noiseDb: 'Ruído (dB)', lux: 'Iluminância (lux)',
+      thermalComfort: 'Conforto térmico', ventilation: 'Ventilação',
+      naturalLight: 'Luz natural', source: 'Fonte da informação',
+      installedPower: 'Potência instalada', estimatedConsumption: 'Consumo estimado',
+      category: 'Categoria', priority: 'Prioridade',
+      description: 'Descrição', recommendation: 'Recomendação',
+      location: 'Localização', deadline: 'Prazo'
+    };
+    const stringify = value => typeof value === 'boolean' ? (value ? 'Sim' : 'Não')
+      : typeof value === 'object' ? JSON.stringify(value) : String(value);
+    const visible = value => value !== '' && value !== null && value !== undefined;
+    const renderValues = values => Object.entries(values || {})
+      .filter(([key, value]) => visible(value) && key !== 'nonConformities')
+      .map(([key, value]) => {
+        const formatted = Array.isArray(value)
+          ? value.map((entry, index) => `<div class="public-audit-field"><dt>Item ${index + 1}</dt><dd>${escapeHtml(stringify(entry))}</dd></div>`).join('')
+          : `<div class="public-audit-field"><dt>${escapeHtml(nameMap[key] || key)}</dt><dd>${escapeHtml(stringify(value))}</dd></div>`;
+        return formatted;
+      }).join('');
+    const blocks = sections.map(([key, label]) => {
+      const data = key === 'nonConformities' ? item.nonConformities : item.data?.[key];
+      const rows = Array.isArray(data)
+        ? data.map((entry, index) => `<section class="public-audit-section"><h4>Registro ${index + 1}</h4><dl>${renderValues(entry)}</dl></section>`).join('')
+        : data && typeof data === 'object' ? `<dl>${renderValues(data)}</dl>` : '';
+      return rows ? `<section class="public-audit-section"><h3>${label}</h3>${rows}</section>` : '';
+    }).filter(Boolean);
+    content.innerHTML = `<div class="audit-history">
+      <p class="audit-note">${source === 'remote' ? 'Consulta somente leitura dos dados confirmados no Supabase. Nenhum registro local será substituído.' : 'Consulta somente leitura dos dados armazenados neste navegador. A sincronização remota é verificada separadamente.'}</p>
+      <p class="sync-badge">${escapeHtml(syncLabel(item.syncState))} · revisão remota ${Number(item.serverRevision || 0)}</p>
+      ${blocks.length ? blocks.join('') : '<p>Nenhum campo preenchido encontrado nesta cópia.</p>'}
+      <p>${Number(item.evidenceIds?.length || 0)} fotografia(s) referenciada(s) neste registro.</p>
+      <button class="audit-secondary" type="button" data-back-history>Voltar ao histórico</button>
+    </div>`;
+    content.querySelector('[data-back-history]')?.addEventListener('click', () => openHistory(mapId));
+  }
+
+  let historyRequestId = 0;
+
+  // O histórico nunca usa pullRemote(): uma consulta não deve sobrescrever
+  // um rascunho local nem impedir a abertura da janela.
   async function openHistory(mapId) {
-    environment = AUDIT_DATA.getEnvironmentByMapId(mapId);
-    if (!environment) return;
-    // Mostrar a janela imediatamente: consultas remotas lentas não devem
-    // fazer o botão Histórico parecer desativado.
-    openModal();
-    title.textContent = 'Histórico de auditorias';
-    environmentLabel.textContent = `${environment.blockName} · ${environment.roomNumber ? `Sala ${environment.roomNumber}` : environment.name}`;
-    content.innerHTML = '<div class="audit-empty"><h3>Carregando histórico…</h3><p>Consultando os registros autorizados deste ambiente.</p></div>';
-    try {
-    let access = null;
-    try { access = await AUDIT_REMOTE.getAccess(); }
-    catch (error) { console.warn('[AuditAccess] Histórico privado indisponível:', error); }
-    if (access?.canAudit && AUDIT_REMOTE.configured && navigator.onLine) {
-      try { await AUDIT_REMOTE.pullRemote(); } catch (error) { console.warn('[AuditRemote] Histórico remoto indisponível.', error); }
-    }
-    const owner = access?.canAudit ? await AUDIT_REMOTE.ownerKey() : null;
-    const deviceKey = owner ? `LOCAL:${await AUDIT_STORAGE.getDeviceId()}` : null;
-    const allLocalItems = access?.canAudit ? await AUDIT_STORAGE.listByEnvironment(environment.environmentId) : [];
-    const localItems = allLocalItems.filter(item =>
-      !AUDIT_SYNC_CORE.isRecoveryAudit(item) &&
-      (access.admin || AUDIT_SYNC_CORE.ownerKey(item) === owner ||
-       (AUDIT_SYNC_CORE.ownerKey(item) === deviceKey && item.ownerId == null)));
-    const recoveries = access?.admin
-      ? await AUDIT_STORAGE.listRecoveries(environment.environmentId)
-      : { legacy: [], conflicts: [] };
-    let publicItems = [];
-    if (AUDIT_REMOTE.configured && navigator.onLine) {
-      try { publicItems = await AUDIT_REMOTE.listPublic(environment.environmentId); }
-      catch (error) { console.warn('[AuditRemote] Consulta pública indisponível.', error); }
-    }
-    const localIds = new Set(localItems.map(item => item.auditId));
-    const items = [...localItems, ...publicItems.filter(item => !localIds.has(item.auditId))]
-      .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
-    const evidenceByAudit = new Map(await Promise.all(localItems.map(async item => [item.auditId, await AUDIT_STORAGE.evidenceSummary(item.auditId)])));
+    const target = AUDIT_DATA.getEnvironmentByMapId(mapId);
+    if (!target) return;
+    const requestId = ++historyRequestId;
+    environment = target;
     audit = null;
     editorUserId = null;
     openModal();
     title.textContent = 'Histórico de auditorias';
-    environmentLabel.textContent = `${environment.blockName} · ${environment.roomNumber ? `Sala ${environment.roomNumber}` : environment.name}`;
-    content.innerHTML = items.length || recoveries.legacy.length || recoveries.conflicts.length ? `<div class="audit-history">${items.map(item => `
-      <article><strong>${statusLabel(item.status)}</strong><span>${new Date(item.updatedAt).toLocaleString('pt-BR')}</span>
-      <small class="sync-badge">${syncLabel(item.syncState)}</small>
-      ${evidenceStatusMarkup(evidenceByAudit.get(item.auditId))}
-      ${item.syncState === 'CONFLICT' ? '<small class="sync-badge">Revisão necessária: versões local e remota foram preservadas</small>' : ''}
-      ${item.publicOnly || item.isPublic ? `<button type="button" data-public-id="${escapeHtml(item.auditId)}">Ver resultados públicos</button>` : ''}
-      ${item.status !== AUDIT_DATA.STATUS.COMPLETED && !item.publicOnly &&
-        (AUDIT_SYNC_CORE.ownerKey(item) === owner || AUDIT_SYNC_CORE.ownerKey(item) === deviceKey)
-          ? `<button type="button" data-resume="${escapeHtml(item.auditId)}">Continuar auditoria</button>` : ''}</article>`).join('')}
-      ${recoveries.legacy.map(item => `<article><strong>Cópia de recuperação preservada</strong><span>${new Date(item.updatedAt).toLocaleString('pt-BR')}</span><small class="sync-badge">Não é um rascunho ativo e não será sincronizada automaticamente</small></article>`).join('')}
-      ${recoveries.conflicts.map(item => `<article><strong>Conflito aguardando resolução</strong><span>${new Date(item.createdAt).toLocaleString('pt-BR')}</span><small class="sync-badge">${escapeHtml(item.reason)} · ambas as versões e o manifesto de evidências foram preservados</small></article>`).join('')}</div>`
-      : '<div class="audit-empty"><h3>Nenhuma auditoria registrada</h3><p>O histórico deste ambiente ainda está vazio.</p></div>';
-    content.querySelectorAll('[data-public-id]').forEach(button =>
-      button.addEventListener('click', () => showPublicAudit(button.dataset.publicId)));
-    content.querySelectorAll('[data-resume]').forEach(button => button.addEventListener('click', async () => {
-      if (!(await AUDIT_REMOTE.getAccess())?.canAudit) return;
-      const candidate = await AUDIT_STORAGE.getAudit(button.dataset.resume);
-      if (!candidate || AUDIT_SYNC_CORE.isRecoveryAudit(candidate)) return;
-      const ownerKey = AUDIT_SYNC_CORE.ownerKey(candidate);
-      if (ownerKey !== (await AUDIT_REMOTE.ownerKey()) &&
-          ownerKey !== `LOCAL:${await AUDIT_STORAGE.getDeviceId()}` && ownerKey !== null) return;
-      if (!candidate.ownerId) {
-        const accepted = window.confirm(
-          'Este é um rascunho antigo sem conta vinculada. Deseja recuperá-lo na sua conta? ' +
-          'Se cancelar, o registro será preservado sem sincronização.'
-        );
-        if (!accepted) return;
-        await AUDIT_REMOTE.approveLegacyAdoption(candidate);
+    environmentLabel.textContent = `${target.blockName} · ${target.roomNumber ? `Sala ${target.roomNumber}` : target.name}`;
+    content.innerHTML = '<div class="audit-empty"><h3>Consultando este dispositivo…</h3><p>Seus dados locais são consultados antes da rede.</p></div>';
+    const isCurrent = () => requestId === historyRequestId && !modal.hidden
+      && title.textContent === 'Histórico de auditorias'
+      && environment?.environmentId === target.environmentId;
+    try {
+      let access = currentAccess?.canAudit ? currentAccess : null;
+      if (!access) access = await AUDIT_REMOTE.getAccess();
+      if (!isCurrent()) return;
+      if (!access?.canAudit) {
+        const message = access?.reviewStatus === 'OFFLINE'
+          ? 'Não foi possível validar a autorização. Conecte-se à internet sem apagar o armazenamento do navegador.'
+          : 'Entre com uma conta aprovada para consultar as auditorias privadas deste ambiente.';
+        content.innerHTML = `<div class="audit-empty"><h3>Acesso necessário</h3><p>${escapeHtml(message)}</p><p>O histórico vazio não significa que seus registros foram apagados.</p><button type="button" class="audit-primary" data-history-login>Minha conta</button></div>`;
+        content.querySelector('[data-history-login]')?.addEventListener('click', openAuthModal);
+        return;
       }
-      audit = candidate;
-      editorUserId = await AUDIT_REMOTE.ownerKey();
-      isDirty = false;
-      stepIndex = audit.currentStep || 0;
-      renderStep();
-    }));
+      const owner = await AUDIT_REMOTE.ownerKey();
+      const deviceKey = `LOCAL:${await AUDIT_STORAGE.getDeviceId()}`;
+      const all = await AUDIT_STORAGE.listByEnvironment(target.environmentId);
+      if (!isCurrent()) return;
+      const locals = all.filter(item =>
+        !AUDIT_SYNC_CORE.isRecoveryAudit(item) &&
+        (access.admin || AUDIT_SYNC_CORE.ownerKey(item) === owner ||
+         (item.ownerId == null && AUDIT_SYNC_CORE.ownerKey(item) === deviceKey)));
+      const recoveries = access.admin ? await AUDIT_STORAGE.listRecoveries(target.environmentId) : {legacy:[],conflicts:[]};
+      const evidenceByAudit = new Map(await Promise.all(locals.map(async item =>
+        [item.auditId, await AUDIT_STORAGE.evidenceSummary(item.auditId)])));
+      if (!isCurrent()) return;
+
+      const renderHistory = (remoteItems = null, remoteError = null) => {
+        if (!isCurrent()) return;
+        const cards = [];
+        for (const item of locals) {
+          const allowedResume = item.status !== AUDIT_DATA.STATUS.COMPLETED &&
+            (AUDIT_SYNC_CORE.ownerKey(item) === owner ||
+             (item.ownerId == null && AUDIT_SYNC_CORE.ownerKey(item) === deviceKey));
+          cards.push(`<article><strong>Este dispositivo · ${escapeHtml(statusLabel(item.status))}</strong>
+            <span>${escapeHtml(new Date(item.updatedAt).toLocaleString('pt-BR'))}</span>
+            <small class="sync-badge">${escapeHtml(syncLabel(item.syncState))}</small>
+            ${evidenceStatusMarkup(evidenceByAudit.get(item.auditId))}
+            <button type="button" data-local-details="${escapeHtml(item.auditId)}">Ver dados preenchidos</button>
+            ${allowedResume ? `<button type="button" data-resume="${escapeHtml(item.auditId)}">Continuar auditoria</button>` : ''}
+            </article>`);
+        }
+        for (const item of remoteItems || []) {
+          const local = locals.find(value => value.auditId === item.auditId);
+          cards.push(`<article><strong>Supabase · ${escapeHtml(statusLabel(item.status))}</strong>
+            <span>${escapeHtml(new Date(item.updatedAt).toLocaleString('pt-BR'))}</span>
+            <small class="sync-badge">Revisão ${Number(item.serverRevision || 0)} · ${item.syncComplete ? 'Confirmada' : 'Em sincronização'}</small>
+            ${local ? '<small>Compare esta cópia com os dados salvos no dispositivo.</small>' : '<small>Registro recuperável do servidor, sem alterar o dispositivo.</small>'}
+            <button type="button" data-remote-details="${escapeHtml(item.auditId)}">Ver dados no Supabase</button>
+            ${!local && item.status !== AUDIT_DATA.STATUS.COMPLETED && item.ownerId === owner
+              ? '<button type="button" data-remote-resume>Retomar esta auditoria</button>' : ''}
+            </article>`);
+        }
+        for (const item of recoveries.legacy) {
+          cards.push(`<article><strong>Cópia antiga de recuperação</strong><span>${escapeHtml(new Date(item.updatedAt).toLocaleString('pt-BR'))}</span><small>Preservada, sem sincronização automática</small></article>`);
+        }
+        for (const item of recoveries.conflicts) {
+          cards.push(`<article><strong>Conflito preservado</strong><small>As duas versões foram mantidas; verifique antes de sincronizar.</small></article>`);
+        }
+        const state = remoteItems === null
+          ? '<p class="audit-note">Consultando o Supabase em segundo plano…</p>'
+          : remoteError
+            ? `<p class="audit-note">Servidor indisponível: ${escapeHtml(remoteError.message || remoteError)}. Os dados locais permanecem intactos.</p>`
+            : '<p class="audit-note">Consulta concluída. O histórico não alterou os registros salvos.</p>';
+        content.innerHTML = `<div class="audit-history">${cards.length ? cards.join('') : '<div class="audit-empty"><h3>Nenhum registro exibido ainda</h3><p>Não há cópia local autorizada para esta sala. Aguarde a consulta ao servidor; não inicie outra auditoria antes de confirmar.</p></div>'}${state}</div>`;
+        content.querySelectorAll('[data-local-details]').forEach(button =>
+          button.addEventListener('click', () => {
+            const item = locals.find(record => record.auditId === button.dataset.localDetails);
+            if (item) renderLocalAuditDetails(item, mapId);
+          }));
+        content.querySelectorAll('[data-remote-details]').forEach(button =>
+          button.addEventListener('click', async () => {
+            button.disabled = true;
+            button.textContent = 'Consultando Supabase…';
+            try {
+              const item = await AUDIT_REMOTE.getPrivateHistoryRecord(button.dataset.remoteDetails);
+              if (isCurrent()) renderLocalAuditDetails(item, mapId, 'remote');
+            } catch (error) {
+              console.warn('[AuditHistory] Não foi possível abrir a versão do Supabase:', error);
+              if (isCurrent()) {
+                button.disabled = false;
+                button.textContent = 'Tentar novamente';
+                const notice = document.createElement('p');
+                notice.className = 'audit-note';
+                notice.textContent = `Não foi possível consultar o servidor: ${error.message || error}`;
+                button.after(notice);
+              }
+            }
+          }));
+        content.querySelectorAll('[data-remote-resume]').forEach(button =>
+          button.addEventListener('click', () => openAudit(mapId)));
+        content.querySelectorAll('[data-resume]').forEach(button =>
+          button.addEventListener('click', async () => {
+            try {
+              if (!(await AUDIT_REMOTE.getAccess())?.canAudit) {
+                openAuthModal(); return;
+              }
+              const candidate = await AUDIT_STORAGE.getAudit(button.dataset.resume);
+              if (!candidate || AUDIT_SYNC_CORE.isRecoveryAudit(candidate)) return;
+              const identity = await AUDIT_REMOTE.ownerKey();
+              const recordOwner = AUDIT_SYNC_CORE.ownerKey(candidate);
+              if (recordOwner !== identity &&
+                  !(candidate.ownerId == null && recordOwner === `LOCAL:${await AUDIT_STORAGE.getDeviceId()}`))
+                throw new Error('O registro pertence a outra conta ou dispositivo.');
+              if (!candidate.ownerId) {
+                if (!window.confirm('Recuperar esta auditoria local na conta atual? Cancelar preserva o rascunho sem sincronizar.')) return;
+                await AUDIT_REMOTE.approveLegacyAdoption(candidate);
+              }
+              await showActiveDraft(candidate, identity, access);
+            } catch (error) {
+              console.warn('[AuditHistory] Falha ao retomar auditoria:', error);
+              window.alert(`Não foi possível retomar: ${error.message || error}`);
+            }
+          }));
+      };
+
+      renderHistory();
+      if (AUDIT_REMOTE.configured && navigator.onLine && !access.offline) {
+        // Apenas leitura, sem salvar no IndexedDB nem bloquear o histórico local.
+        AUDIT_REMOTE.listPrivateHistory(target.environmentId).then(items => {
+          renderHistory(items);
+        }).catch(error => {
+          console.warn('[AuditHistory] Consulta remota indisponível:', error);
+          renderHistory([], error);
+        });
+      } else renderHistory([], new Error('Sem conexão para consultar o servidor.'));
     } catch (error) {
-      console.error('[AuditHistory] Falha ao abrir histórico:', error);
-      content.innerHTML = `<div class="audit-empty"><h3>Histórico indisponível</h3><p>Não foi possível consultar o histórico neste momento. Seus dados já salvos no dispositivo não foram apagados.</p><p>${escapeHtml(error.message || error)}</p><button type="button" class="audit-secondary" data-history-retry>Tentar novamente</button></div>`;
+      if (!isCurrent()) return;
+      console.error('[AuditHistory] Falha ao abrir o histórico:', error);
+      content.innerHTML = `<div class="audit-empty"><h3>Histórico indisponível</h3><p>Não foi possível ler os registros autorizados. O armazenamento local não foi apagado.</p><p>${escapeHtml(error.message || error)}</p><button type="button" class="audit-secondary" data-history-retry>Tentar novamente</button></div>`;
       content.querySelector('[data-history-retry]')?.addEventListener('click', () => openHistory(mapId));
     }
   }
