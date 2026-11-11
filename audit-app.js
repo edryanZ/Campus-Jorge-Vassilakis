@@ -223,6 +223,13 @@ const AUDIT_APP = (() => {
   async function openHistory(mapId) {
     environment = AUDIT_DATA.getEnvironmentByMapId(mapId);
     if (!environment) return;
+    // Mostrar a janela imediatamente: consultas remotas lentas não devem
+    // fazer o botão Histórico parecer desativado.
+    openModal();
+    title.textContent = 'Histórico de auditorias';
+    environmentLabel.textContent = `${environment.blockName} · ${environment.roomNumber ? `Sala ${environment.roomNumber}` : environment.name}`;
+    content.innerHTML = '<div class="audit-empty"><h3>Carregando histórico…</h3><p>Consultando os registros autorizados deste ambiente.</p></div>';
+    try {
     let access = null;
     try { access = await AUDIT_REMOTE.getAccess(); }
     catch (error) { console.warn('[AuditAccess] Histórico privado indisponível:', error); }
@@ -288,6 +295,11 @@ const AUDIT_APP = (() => {
       stepIndex = audit.currentStep || 0;
       renderStep();
     }));
+    } catch (error) {
+      console.error('[AuditHistory] Falha ao abrir histórico:', error);
+      content.innerHTML = `<div class="audit-empty"><h3>Histórico indisponível</h3><p>Não foi possível consultar o histórico neste momento. Seus dados já salvos no dispositivo não foram apagados.</p><p>${escapeHtml(error.message || error)}</p><button type="button" class="audit-secondary" data-history-retry>Tentar novamente</button></div>`;
+      content.querySelector('[data-history-retry]')?.addEventListener('click', () => openHistory(mapId));
+    }
   }
 
   async function showPublicAudit(auditId) {
