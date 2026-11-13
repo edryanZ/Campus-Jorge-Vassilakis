@@ -3,9 +3,9 @@
 ## 2026-11-13 — Primeira rodada: painel, navegação e acesso a auditorias
 
 - Novo resumo abaixo do cabeçalho: energia, água, papel, auditorias e patrimônio. Sem inventar indicadores ou tombos: estados ainda não mensurados estão identificados.
-- Mapa inteiro como visão inicial, travado por padrão em telas até 820px; opção explícita para explorar, retorno à visão geral, seletor de salas e detalhes em painel inferior.
+- Mapa inteiro como visão inicial, travado por padrão em telas até 820px; opção explícita para explorar, retorno à visão geral, seletor de salas e detalhes em painel inferior. Indicadores horizontais compactos no mobile para manter a planta visível desde a abertura.
 - Corrigido o cálculo do foco da sala e a transformação do zoom sob a proporção real do SVG; limites de arrasto impedem perder o campus fora de vista.
-- Consulta de auditorias e busca remota utilizam a sessão existente, evitando chamadas repetitivas desnecessárias ao Auth. Permissões continuam verificadas no Supabase e sob RLS.
+- Consulta de auditorias e busca remota utilizam a sessão existente, evitando chamadas repetitivas desnecessárias ao Auth. Consultas relevantes têm limite de espera com erro explicativo, sem gerar rascunhos duplicados. Permissões continuam verificadas no Supabase e sob RLS.
 - Central permite abrir diretamente o registro remoto autorizado selecionado, inclusive para administrador, sem precisar depender apenas do histórico genérico da sala.
 - Tela de conta adiciona revalidação manual de permissões, com mensagens de erro sem apagar registros locais.
 - Nenhuma alteração SQL, nenhuma publicação de auditoria, nenhuma modificação dos registros reais, nenhuma mudança na main ou deploy automático.

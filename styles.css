@@ -690,3 +690,15 @@ body { display: flex; flex-direction: column; height: 100dvh; }
   .map-toolbar { padding: 8px; }
   .map-tool-button { padding: 7px 8px; }
 }
+
+/* A faixa de indicadores usa uma única linha no celular: mapa visível na abertura. */
+@media (max-width: 820px) {
+  .overview-grid {
+    display: flex; overflow-x: auto; overscroll-behavior-inline: contain;
+    scroll-snap-type: x proximity; padding: 1px 1px 5px;
+    scrollbar-width: thin;
+  }
+  .overview-stat { flex: 0 0 160px; min-height: 57px; scroll-snap-align: start; }
+  .map-panel { height: min(58dvh, 570px); min-height: 340px; }
+  .map-viewport { min-height: 210px; }
+}

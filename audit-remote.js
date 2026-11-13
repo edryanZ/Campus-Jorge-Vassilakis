@@ -13,6 +13,22 @@ const AUDIT_REMOTE = (() => {
   const attempts = new Map();
   let syncing = false;
   const now = () => new Date().toISOString();
+  // Limita consultas remotas: falha controlada sem apagar ou recriar rascunhos.
+  async function queryWithDeadline(builder, description, ms = 9000) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), ms);
+    try {
+      const response = await builder.abortSignal(controller.signal);
+      if (response.error) throw response.error;
+      return response;
+    } catch (error) {
+      if (controller.signal.aborted)
+        throw new Error(description + ' demorou além do limite. Verifique a conexão e tente novamente; os dados locais continuam preservados.');
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
   const newId = prefix => `${prefix}-${crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`}`;
   const dispatch = (name, detail = {}) => window.dispatchEvent(new CustomEvent(name, { detail }));
 
@@ -136,8 +152,7 @@ const AUDIT_REMOTE = (() => {
   async function listAccessRequests() {
     const access = await getAccess();
     if (!access?.admin || access.offline) throw new Error('Apenas administradores conectados podem consultar solicitações.');
-    const { data, error } = await client.rpc('admin_list_access_requests');
-    if (error) throw error;
+    const { data } = await queryWithDeadline(client.rpc('admin_list_access_requests'), 'Consulta de contas');
     return data || [];
   }
 
@@ -176,8 +191,7 @@ const AUDIT_REMOTE = (() => {
   async function listActiveOccupancy() {
     const access = await getAccess();
     if (!client || !navigator.onLine || !access?.canAudit || access.offline) return [];
-    const result = await client.rpc('list_active_audit_occupancy');
-    if (result.error) throw result.error;
+    const result = await queryWithDeadline(client.rpc('list_active_audit_occupancy'), 'Verificação de ocupação');
     return result.data || [];
   }
 
@@ -200,8 +214,7 @@ const AUDIT_REMOTE = (() => {
     const access = await getAccess();
     if (!access?.admin || access.offline || !navigator.onLine)
       throw new Error('A consulta de solicitações exige administrador conectado.');
-    const { data, error } = await client.rpc('admin_list_audit_participation_requests');
-    if (error) throw error;
+    const { data } = await queryWithDeadline(client.rpc('admin_list_audit_participation_requests'), 'Consulta de participações');
     return data || [];
   }
 
@@ -233,10 +246,9 @@ const AUDIT_REMOTE = (() => {
     // Sessão local + autorização verificada; evita uma segunda chamada HTTP de Auth.
     const user = await sessionUser();
     if (!client || !user || !navigator.onLine || !(await getAccess())?.canAudit) return null;
-    const result = await client.from('audits').select('*').eq('owner_id', user.id)
+    const result = await queryWithDeadline(client.from('audits').select('*').eq('owner_id', user.id)
       .eq('environment_id', environmentId).in('status', ['DRAFT', 'IN_PROGRESS'])
-      .order('updated_at', { ascending: false }).limit(1).maybeSingle();
-    if (result.error) throw result.error;
+      .order('updated_at', { ascending: false }).limit(1).maybeSingle(), 'Busca de rascunho remoto');
     return result.data ? remoteToLocal(result.data) : null;
   }
 
@@ -535,10 +547,9 @@ const AUDIT_REMOTE = (() => {
     const items = [];
     if (user && access?.canAudit) {
       // Nunca filtrar owner_id no cliente: RLS permite ao ADMIN consultar os registros autorizados de outros auditores.
-      const owned = await client.from('audits')
+      const owned = await queryWithDeadline(client.from('audits')
         .select('id,environment_id,status,updated_at,completed_at,server_revision,owner_id,sync_complete,is_public')
-        .order('updated_at', { ascending: false }).limit(1000);
-      if (owned.error) throw owned.error;
+        .order('updated_at', { ascending: false }).limit(1000), 'Consulta de auditorias autorizadas');
       for (const row of owned.data || []) {
         items.push({
           auditId: row.id, environmentId: row.environment_id, status: row.status,
@@ -569,10 +580,9 @@ const AUDIT_REMOTE = (() => {
         });
       }
     }
-    const published = await client.from('published_audits')
+    const published = await queryWithDeadline(client.from('published_audits')
       .select('id,environment_id,status,updated_at,completed_at,server_revision')
-      .order('updated_at', { ascending: false }).limit(1000);
-    if (published.error) throw published.error;
+      .order('updated_at', { ascending: false }).limit(1000), 'Consulta de resultados publicados');
     for (const row of published.data || []) {
       if (items.some(item => item.auditId === row.id)) continue;
       items.push({
@@ -590,10 +600,9 @@ const AUDIT_REMOTE = (() => {
   // A segurança dos registros permanece a cargo do RLS do Supabase.
   async function listPrivateHistory(environmentId) {
     if (!client || !navigator.onLine || !(await getAccess())?.canAudit) return [];
-    const result = await client.from('audits')
+    const result = await queryWithDeadline(client.from('audits')
       .select('id,environment_id,status,updated_at,completed_at,owner_id,server_revision,sync_complete')
-      .eq('environment_id', environmentId).order('updated_at', { ascending: false }).limit(50);
-    if (result.error) throw result.error;
+      .eq('environment_id', environmentId).order('updated_at', { ascending: false }).limit(50), 'Consulta de histórico remoto');
     return (result.data || []).map(row => ({
       auditId: row.id, environmentId: row.environment_id, status: row.status,
       updatedAt: row.updated_at, completedAt: row.completed_at, ownerId: row.owner_id,
@@ -605,8 +614,7 @@ const AUDIT_REMOTE = (() => {
   async function getPrivateHistoryRecord(auditId) {
     if (!client || !navigator.onLine || !(await getAccess())?.canAudit)
       throw new Error('Entre com uma conta de auditor autorizada e conectada para consultar o servidor.');
-    const result = await client.from('audits').select('*').eq('id', auditId).maybeSingle();
-    if (result.error) throw result.error;
+    const result = await queryWithDeadline(client.from('audits').select('*').eq('id', auditId).maybeSingle(), 'Consulta do registro remoto');
     if (!result.data) throw new Error('Registro não encontrado ou sem permissão de acesso.');
     return remoteToLocal(result.data);
   }

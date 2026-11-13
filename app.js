@@ -401,6 +401,7 @@ function hideTooltip() {
 function selectLocation(id) {
   const item = locationRegistry.get(id);
   if (!item) return;
+  if (mapBreakpoint.matches) hideTooltip();
   selectedId = id;
   document.querySelectorAll('.map-feature').forEach(el => el.classList.toggle('is-selected', el.dataset.id === id));
   renderDetails(item);
