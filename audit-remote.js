@@ -83,7 +83,7 @@ const AUDIT_REMOTE = (() => {
     // Evita várias leituras simultâneas do mesmo perfil e permite abrir
     // rascunhos autorizados rapidamente, sem cache longo de permissões.
     const recent = verifiedAccess.get(user.id);
-    if (!forceRefresh && recent?.canAudit && !recent.offline && recent.checkedAt > Date.now() - 4000) return recent;
+    if (!forceRefresh && recent?.canAudit && !recent.offline && recent.checkedAt > Date.now() - 15000) return recent;
     if (accessInFlight.has(user.id)) return accessInFlight.get(user.id);
     const task = (async () => {
       let data;
@@ -223,14 +223,15 @@ const AUDIT_REMOTE = (() => {
     if (error) throw error;
     const row = Array.isArray(data) ? data[0] : data;
     if (!row) throw new Error('A auditoria compartilhada não está disponível.');
-    const user = await currentUser();
+    const user = await sessionUser();
     const record = remoteToLocal(row);
     if (record.ownerId !== user?.id) record.collaborationEditorId = user.id;
     return record;
   }
 
   async function findRemoteActive(environmentId) {
-    const user = await currentUser();
+    // Sessão local + autorização verificada; evita uma segunda chamada HTTP de Auth.
+    const user = await sessionUser();
     if (!client || !user || !navigator.onLine || !(await getAccess())?.canAudit) return null;
     const result = await client.from('audits').select('*').eq('owner_id', user.id)
       .eq('environment_id', environmentId).in('status', ['DRAFT', 'IN_PROGRESS'])
@@ -240,7 +241,7 @@ const AUDIT_REMOTE = (() => {
   }
 
   async function resumeOrCreateActive(proposed) {
-    const user = await currentUser();
+    const user = await sessionUser();
     if (!client || !user || !navigator.onLine || !(await getAccess())?.canAudit)
       return { skipped: true, audit: proposed };
     const mutationId = proposed.mutationId || newId('MUTATION');
@@ -529,9 +530,10 @@ const AUDIT_REMOTE = (() => {
   // ao usuario autorizado. A view publicada expõe apenas payload sanitizado.
   async function listAccessibleAudits() {
     if (!client || !navigator.onLine) return { items: [], offline: !navigator.onLine, authenticated: false };
-    const user = await currentUser();
+    const user = await sessionUser();
+    const access = user ? await getAccess() : null;
     const items = [];
-    if (user && (await getAccess())?.canAudit) {
+    if (user && access?.canAudit) {
       // Nunca filtrar owner_id no cliente: RLS permite ao ADMIN consultar os registros autorizados de outros auditores.
       const owned = await client.from('audits')
         .select('id,environment_id,status,updated_at,completed_at,server_revision,owner_id,sync_complete,is_public')
@@ -549,7 +551,7 @@ const AUDIT_REMOTE = (() => {
       }
     }
     // Metadados mínimos de ocupação, sem expor o payload privado de outro auditor.
-    if (user && (await getAccess())?.canAudit) {
+    if (user && access?.canAudit) {
       const [occupancy, participation] = await Promise.all([listActiveOccupancy(), listMyParticipation()]);
       const byAudit = new Map(participation.map(item => [item.audit_id, item.status]));
       for (const slot of occupancy) {

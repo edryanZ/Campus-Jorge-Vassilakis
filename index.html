@@ -33,6 +33,35 @@
     </div>
   </header>
 
+  <section class="campus-overview" aria-label="Indicadores de sustentabilidade e gestão">
+    <div class="overview-lead">
+      <strong>Gestão ambiental do campus</strong>
+      <span>Indicadores e registros de apoio à auditoria e à sustentabilidade</span>
+    </div>
+    <div class="overview-grid">
+      <article class="overview-stat">
+        <span class="overview-icon" aria-hidden="true">⚡</span>
+        <div><strong>Energia</strong><span>Consumo a mensurar</span></div>
+      </article>
+      <article class="overview-stat">
+        <span class="overview-icon" aria-hidden="true">💧</span>
+        <div><strong>Água</strong><span>Consumo a mensurar</span></div>
+      </article>
+      <article class="overview-stat">
+        <span class="overview-icon" aria-hidden="true">▤</span>
+        <div><strong>Papel</strong><span>Índice a levantar</span></div>
+      </article>
+      <button id="overviewAuditsBtn" class="overview-stat overview-action" type="button" aria-label="Abrir Central de Auditorias">
+        <span class="overview-icon" aria-hidden="true">✓</span>
+        <span><strong>Auditorias</strong><span>Consultar registros</span></span>
+      </button>
+      <article class="overview-stat">
+        <span class="overview-icon" aria-hidden="true">▣</span>
+        <div><strong>Patrimônio</strong><span>Tombos: em preparação</span></div>
+      </article>
+    </div>
+  </section>
+
   <main class="app-shell">
     <aside class="sidebar" aria-label="Filtros e legenda">
       <section>
@@ -71,9 +100,17 @@
 
     <section class="map-panel" aria-label="Mapa interativo do campus">
       <div class="map-toolbar">
-        <div class="zoom-controls" aria-label="Controles de zoom">
+        <div class="map-tools">
+          <div class="zoom-controls" aria-label="Controles de zoom">
           <button id="zoomInBtn" type="button" aria-label="Aumentar zoom">+</button>
           <button id="zoomOutBtn" type="button" aria-label="Diminuir zoom">−</button>
+          </div>
+          <button id="mapMoveToggle" class="map-tool-button" type="button" aria-pressed="false">Explorar mapa</button>
+          <button id="mapResetBtn" class="map-tool-button" type="button">Visão geral</button>
+          <label class="sr-only" for="mapLocationPicker">Localizar uma sala ou setor</label>
+          <select id="mapLocationPicker" class="map-location-picker" aria-label="Localizar uma sala ou setor">
+            <option value="">Localizar sala ou setor…</option>
+          </select>
         </div>
         <div class="map-badges">
           <span>Mapa esquemático</span>
@@ -81,7 +118,8 @@
         </div>
       </div>
 
-      <div id="mapViewport" class="map-viewport">
+      <p id="mapHint" class="map-hint" aria-live="polite">Mapa fixo: toque numa sala para ver os detalhes. Use “Explorar mapa” para mover.</p>
+      <div id="mapViewport" class="map-viewport is-navigation-locked">
         <svg id="campusMap" viewBox="0 0 1500 920" role="img" aria-labelledby="mapTitle mapDesc">
           <title id="mapTitle">Mapa interativo do Campus Jorge Vassilakis</title>
           <desc id="mapDesc">Planta esquemática com blocos, salas, estacionamentos, vias internas, campo de futebol, SAFs, viveiro e Bloco K.</desc>
@@ -276,6 +314,7 @@
         </form>
         <button id="signOutBtn" class="audit-secondary" type="button" hidden>Sair desta conta</button>
         <button id="syncNowBtn" class="audit-secondary" type="button" hidden>Sincronizar agora</button>
+        <button id="retryAccessBtn" class="audit-secondary" type="button" hidden>Revalidar permissões</button>
         <p class="audit-note">A consulta de resultados <strong>publicados</strong> é livre. Para criar ou editar auditorias é necessário ter conta aprovada. Registros antigos deste dispositivo não serão apagados.</p>
         <section id="adminRequestsPanel" class="admin-requests" hidden>
           <h3>Gerenciar acessos</h3>

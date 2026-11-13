@@ -987,6 +987,7 @@ const AUDIT_APP = (() => {
   const authStatus = document.getElementById('authStatus');
   const signOutButton = document.getElementById('signOutBtn');
   const syncNowButton = document.getElementById('syncNowBtn');
+  const retryAccessButton = document.getElementById('retryAccessBtn');
   const adminPanel = document.getElementById('adminRequestsPanel');
   const adminList = document.getElementById('accountRequestsList');
   const adminStatus = document.getElementById('accountRequestsStatus');
@@ -1116,7 +1117,7 @@ const AUDIT_APP = (() => {
     }
   }
 
-  async function setAuthState(user, message = '') {
+  async function setAuthState(user, message = '', { forceRefresh = false } = {}) {
     const generation = ++authGeneration;
     const authenticated = Boolean(user);
     authButton.textContent = authenticated ? 'Minha conta' : 'Entrar';
@@ -1124,6 +1125,7 @@ const AUDIT_APP = (() => {
     signupForm.hidden = true;
     showSignupButton.hidden = authenticated || !AUDIT_REMOTE.configured;
     signOutButton.hidden = !authenticated;
+    retryAccessButton.hidden = !authenticated;
     syncNowButton.hidden = true;
     adminPanel.hidden = true;
     currentAccess = null;
@@ -1137,7 +1139,7 @@ const AUDIT_APP = (() => {
     authStatus.className = 'auth-status';
     authStatus.textContent = 'Verificando autorização da conta…';
     try {
-      const access = await AUDIT_REMOTE.getAccess();
+      const access = await AUDIT_REMOTE.getAccess({ forceRefresh });
       if (generation !== authGeneration) return;
       currentAccess = access;
       if (access?.canAudit) {
@@ -1175,6 +1177,21 @@ const AUDIT_APP = (() => {
     authButton.focus();
   }
   authButton.addEventListener('click', openAuthModal);
+  retryAccessButton.addEventListener('click', async () => {
+    retryAccessButton.disabled = true;
+    authStatus.textContent = 'Revalidando conta e permissões no servidor…';
+    try {
+      const user = await AUDIT_REMOTE.sessionUser();
+      if (!user) {
+        await setAuthState(null, 'Sessão não encontrada. Entre novamente.');
+      } else {
+        await setAuthState(user, '', { forceRefresh: true });
+      }
+    } catch (error) {
+      authStatus.className = 'auth-status is-error';
+      authStatus.textContent = 'Não foi possível revalidar a conta: ' + (error.message || error);
+    } finally { retryAccessButton.disabled = false; }
+  });
   authModal.querySelectorAll('[data-auth-close]').forEach(element => element.addEventListener('click', closeAuthModal));
   showSignupButton.addEventListener('click', () => {
     authForm.hidden = true;
@@ -1325,14 +1342,30 @@ const AUDIT_APP = (() => {
       const action = document.createElement('button');
       action.type = 'button';
       const published = Boolean(item.publicOnly || item.isPublic);
-      action.textContent = published ? 'Ver resultados públicos' : 'Ver histórico';
+      action.textContent = published ? 'Ver resultados públicos'
+        : item.remoteOnly ? 'Ver dados no Supabase' : 'Ver histórico';
       action.disabled = !published && !env?.mapId;
       if (!item.occupancyOnly) action.addEventListener('click', async () => {
         centerModal.hidden = true;
         try {
           if (published) await showPublicAudit(item.auditId);
-          else await openHistory(env.mapId);
-        } catch (error) { console.error('[AuditCenter]', error); centerModal.hidden = false; }
+          else if (item.remoteOnly) {
+            // Abrir a auditoria selecionada, não apenas o histórico da sala.
+            const record = await AUDIT_REMOTE.getPrivateHistoryRecord(item.auditId);
+            environment = AUDIT_DATA.getEnvironmentByMapId(env.mapId);
+            audit = null;
+            editorUserId = null;
+            openModal();
+            environmentLabel.textContent = env
+              ? `${env.blockName} · ${env.roomNumber ? 'Sala ' + env.roomNumber : env.name}`
+              : item.environmentId;
+            renderLocalAuditDetails(record, env.mapId, 'remote');
+          } else await openHistory(env.mapId);
+        } catch (error) {
+          console.error('[AuditCenter]', error);
+          centerModal.hidden = false;
+          window.alert('Falha ao consultar a auditoria: ' + (error.message || error));
+        }
       });
       if (item.occupancyOnly) {
         action.textContent = item.participationStatus === 'APPROVED'

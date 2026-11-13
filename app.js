@@ -32,6 +32,37 @@ const detailsPanel = document.getElementById('detailsPanel');
 const detailsTemplate = document.getElementById('detailsTemplate');
 const searchInput = document.getElementById('searchInput');
 const resultCount = document.getElementById('resultCount');
+const mapMoveToggle = document.getElementById('mapMoveToggle');
+const mapResetButton = document.getElementById('mapResetBtn');
+const mapLocationPicker = document.getElementById('mapLocationPicker');
+const mapHint = document.getElementById('mapHint');
+const mapBreakpoint = window.matchMedia('(max-width: 820px)');
+let mapUnlocked = !mapBreakpoint.matches;
+
+function syncMapMode() {
+  mapViewport.classList.toggle('is-navigation-locked', !mapUnlocked);
+  mapMoveToggle.textContent = mapUnlocked ? 'Fixar mapa' : 'Explorar mapa';
+  mapMoveToggle.setAttribute('aria-pressed', String(mapUnlocked));
+  document.getElementById('zoomInBtn').disabled = !mapUnlocked;
+  document.getElementById('zoomOutBtn').disabled = !mapUnlocked;
+  mapHint.textContent = mapUnlocked
+    ? 'Exploração ativa: arraste para mover, use o zoom ou escolha uma sala.'
+    : 'Mapa fixo e campus completo: toque numa sala ou use “Localizar sala ou setor”.';
+}
+
+function refreshLocationPicker() {
+  const current = mapLocationPicker.value;
+  mapLocationPicker.replaceChildren(new Option('Localizar sala ou setor…', ''));
+  const ids = [...new Set([...document.querySelectorAll('.map-feature[data-id]')]
+    .map(element => element.dataset.id))];
+  const places = ids.map(id => locationRegistry.get(id)).filter(Boolean)
+    .sort((left, right) => String(left.number || left.name).localeCompare(String(right.number || right.name), 'pt-BR', { numeric: true }));
+  for (const place of places) {
+    const label = [place.block, place.number ? 'Sala ' + place.number : place.name].filter(Boolean).join(' · ');
+    mapLocationPicker.add(new Option(label, place.id));
+  }
+  if (places.some(place => place.id === current)) mapLocationPicker.value = current;
+}
 
 function getColor(item) {
   if (item.color) return item.color;
@@ -481,9 +512,11 @@ function focusLocation(id) {
   const bbox = el.getBBox();
   const viewport = mapViewport.getBoundingClientRect();
   const targetScale = Math.min(2.2, Math.max(1.25, Math.min(viewport.width / (bbox.width * 4), viewport.height / (bbox.height * 4))));
+  mapUnlocked = true;
+  syncMapMode();
   transform.scale = targetScale;
-  transform.x = (750 - (bbox.x + bbox.width / 2)) * targetScale;
-  transform.y = (460 - (bbox.y + bbox.height / 2)) * targetScale;
+  transform.x = 750 - (bbox.x + bbox.width / 2) * targetScale;
+  transform.y = 460 - (bbox.y + bbox.height / 2) * targetScale;
   applyTransform();
 }
 
@@ -595,21 +628,29 @@ function escapeHtml(value) {
 }
 
 function applyTransform() {
-  const scale = Math.max(.75, Math.min(3.2, transform.scale));
+  const scale = Math.max(1, Math.min(3.2, transform.scale));
   transform.scale = scale;
+  // Nunca permitir que o campus inteiro desapareça do enquadramento.
+  transform.x = Math.max(1500 * (1 - scale), Math.min(0, transform.x));
+  transform.y = Math.max(920 * (1 - scale), Math.min(0, transform.y));
   panZoomLayer.setAttribute('transform', `translate(${transform.x} ${transform.y}) scale(${scale})`);
 }
 
 function zoomBy(factor, clientX = null, clientY = null) {
   const oldScale = transform.scale;
-  const newScale = Math.max(.75, Math.min(3.2, oldScale * factor));
+  const newScale = Math.max(1, Math.min(3.2, oldScale * factor));
   if (clientX !== null && clientY !== null) {
-    const rect = mapViewport.getBoundingClientRect();
-    const svgX = ((clientX - rect.left) / rect.width) * 1500;
-    const svgY = ((clientY - rect.top) / rect.height) * 920;
-    const ratio = newScale / oldScale;
-    transform.x = svgX - (svgX - transform.x) * ratio;
-    transform.y = svgY - (svgY - transform.y) * ratio;
+    // getScreenCTM respeita as margens do SVG no celular (preserveAspectRatio).
+    const matrix = mapSvg.getScreenCTM();
+    if (matrix) {
+      const point = mapSvg.createSVGPoint();
+      point.x = clientX;
+      point.y = clientY;
+      const coords = point.matrixTransform(matrix.inverse());
+      const ratio = newScale / oldScale;
+      transform.x = coords.x - (coords.x - transform.x) * ratio;
+      transform.y = coords.y - (coords.y - transform.y) * ratio;
+    }
   }
   transform.scale = newScale;
   applyTransform();
@@ -617,7 +658,9 @@ function zoomBy(factor, clientX = null, clientY = null) {
 
 function resetView() {
   transform = { x: 0, y: 0, scale: 1 };
+  mapUnlocked = !mapBreakpoint.matches;
   applyTransform();
+  syncMapMode();
   routeLayer.innerHTML = '';
 }
 
@@ -643,6 +686,7 @@ function setupInteractions() {
       currentFloor = button.dataset.floor;
       document.querySelectorAll('.floor-btn').forEach(btn => btn.classList.toggle('is-active', btn === button));
       renderBlocks();
+      refreshLocationPicker();
       renderFilters();
       if (selectedId?.startsWith('k-')) clearSelection();
     });
@@ -655,18 +699,33 @@ function setupInteractions() {
     renderFilters();
     applyFilters();
   });
+  mapMoveToggle.addEventListener('click', () => {
+    if (mapUnlocked) resetView();
+    else { mapUnlocked = true; syncMapMode(); }
+  });
+  mapResetButton.addEventListener('click', resetView);
+  mapLocationPicker.addEventListener('change', () => {
+    const id = mapLocationPicker.value;
+    if (!id) return;
+    selectLocation(id);
+    focusLocation(id);
+  });
+  document.getElementById('overviewAuditsBtn').addEventListener('click', () =>
+    document.getElementById('auditCenterBtn').click());
+  mapBreakpoint.addEventListener?.('change', resetView);
   document.getElementById('zoomInBtn').addEventListener('click', () => zoomBy(1.2));
   document.getElementById('zoomOutBtn').addEventListener('click', () => zoomBy(1 / 1.2));
   document.getElementById('resetViewBtn').addEventListener('click', resetView);
   document.getElementById('printBtn').addEventListener('click', () => window.print());
 
   mapViewport.addEventListener('wheel', event => {
+    if (!mapUnlocked) return;
     event.preventDefault();
     zoomBy(event.deltaY < 0 ? 1.12 : 1 / 1.12, event.clientX, event.clientY);
   }, { passive: false });
 
   mapViewport.addEventListener('pointerdown', event => {
-    if (event.button !== 0) return;
+    if (!mapUnlocked || event.button !== 0) return;
     if (event.target.closest?.('.map-feature')) return;
     dragState = {
       pointerId: event.pointerId,
@@ -721,4 +780,6 @@ renderLegend();
 renderBlocks();
 renderFilters();
 setupInteractions();
+syncMapMode();
+refreshLocationPicker();
 applyTransform();
