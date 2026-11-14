@@ -112,3 +112,44 @@ test('JavaScript de auditoria e cache são sintaticamente válidos', () => {
   for(const file of ['audit-app.js','audit-remote.js','audit-validation.js','audit-backup.js','sw.js'])
     assert.doesNotThrow(() => new vm.Script(read(file),{filename:file}));
 });
+
+
+test('backup preserva fotografias próprias e não exporta registros privados de outros usuários', async () => {
+  const noop = { addEventListener(){}, disabled:false, textContent:'' };
+  const a = { auditId:'AUDIT-DO-AUDITOR',ownerId:'auditor-1',environmentId:'B-SALA-1',status:'IN_PROGRESS' };
+  const b = { auditId:'AUDIT-DE-TERCEIRO',ownerId:'auditor-2',environmentId:'B-SALA-2',status:'IN_PROGRESS' };
+  const old = { auditId:'AUDIT-LEGADO',ownerId:null,environmentId:'B-SALA-3',status:'IN_PROGRESS' };
+  const context = {
+    document:{getElementById(){return noop}},
+    TextEncoder,Blob,Uint32Array,DataView,ArrayBuffer,Uint8Array,
+    navigator:{onLine:false},
+    AUDIT_REMOTE:{
+      async getAccess(){return {userId:'auditor-1',canAudit:true,admin:false}},
+      async sessionUser(){return {id:'auditor-1'}}
+    },
+    AUDIT_STORAGE:{
+      async getDeviceId(){return 'DEVICE-A'},
+      async listAudits(){return [a,b,old]},
+      async listEvidence(){return [
+        {evidenceId:'FOTO-A',auditId:a.auditId,blob:new Blob([new Uint8Array([9,8,7])]),syncState:'LOCAL_ONLY'},
+        {evidenceId:'FOTO-B',auditId:b.auditId,blob:new Blob([new Uint8Array([4,5])]),syncState:'LOCAL_ONLY'}
+      ]},
+      async listConflicts(){return []}
+    }
+  };
+  vm.runInNewContext(read('audit-backup.js'),context);
+  const result = await context.AUDIT_BACKUP.collect();
+  assert.equal(result.auditCount,2);
+  assert.equal(result.photoCount,1);
+  const bytes = new Uint8Array(await result.archive.arrayBuffer());
+  const dv=new DataView(bytes.buffer);
+  const start=30+dv.getUint16(26,true);
+  const size=dv.getUint32(22,true);
+  const manifest=JSON.parse(new TextDecoder().decode(bytes.slice(start,start+size)));
+  assert.equal(manifest.audits.length,2);
+  assert.ok(manifest.audits.some(item=>item.auditId===a.auditId));
+  assert.ok(manifest.audits.some(item=>item.auditId===old.auditId));
+  assert.ok(!manifest.audits.some(item=>item.auditId===b.auditId));
+  assert.equal(manifest.evidence.length,1);
+  assert.equal(manifest.evidence[0].evidenceId,'FOTO-A');
+});
