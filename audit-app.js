@@ -139,19 +139,25 @@ const AUDIT_APP = (() => {
   }
 
   async function openSharedAudit(auditId) {
+    const expectedUser = await AUDIT_REMOTE.sessionUser();
     const access = await AUDIT_REMOTE.getAccess();
-    if (!access?.canAudit || access.offline || !navigator.onLine) {
+    if (!expectedUser || access?.userId !== expectedUser.id ||
+        !access.canAudit || access.offline || !navigator.onLine) {
       window.alert('A participação compartilhada exige conexão e autorização atualizada.');
       return;
     }
     // Só retorna o payload completo depois da aprovação verificada no servidor.
     const remote = await AUDIT_REMOTE.getSharedAudit(auditId);
+    if ((await AUDIT_REMOTE.sessionUser())?.id !== expectedUser.id)
+      throw new Error('A sessão mudou durante a consulta. Entre novamente antes de editar.');
     if (!remote.collaborationEditorId) {
       const target = AUDIT_DATA.getEnvironment(remote.environmentId);
       if (target?.mapId) return openAudit(target.mapId);
       throw new Error('Ambiente não encontrado no mapa.');
     }
     const existing = await AUDIT_STORAGE.getAudit(auditId);
+    if ((await AUDIT_REMOTE.sessionUser())?.id !== expectedUser.id)
+      throw new Error('A sessão mudou durante a abertura da auditoria compartilhada.');
     // PENDING também pode significar evidência remota ainda não confirmada.
     // Só impedir a abertura quando houver edição local distinta da revisão remota.
     const hasLocalEdit = existing && ['LOCAL_ONLY', 'PENDING', 'ERROR', 'CONFLICT'].includes(existing.syncState) &&
@@ -161,12 +167,16 @@ const AUDIT_APP = (() => {
       window.alert('Existe uma cópia local com alterações pendentes ou em conflito neste dispositivo. Ela foi preservada. Resolva a sincronização antes de abrir a versão compartilhada.');
       return;
     }
-    environment = AUDIT_DATA.getEnvironment(remote.environmentId);
-    if (!environment) throw new Error('Ambiente da auditoria não encontrado no mapa.');
+    const targetEnvironment = AUDIT_DATA.getEnvironment(remote.environmentId);
+    if (!targetEnvironment) throw new Error('Ambiente da auditoria não encontrado no mapa.');
+    if ((await AUDIT_REMOTE.sessionUser())?.id !== expectedUser.id)
+      throw new Error('A sessão mudou; nenhuma cópia compartilhada foi aberta.');
     await AUDIT_STORAGE.saveAudit(remote, { allowRemoteMerge: true, enforceActiveUniqueness: true });
+    if ((await AUDIT_REMOTE.sessionUser())?.id !== expectedUser.id) return;
     remote.reviewedSteps ||= {};
+    environment = targetEnvironment;
     audit = remote;
-    editorUserId = await AUDIT_REMOTE.ownerKey();
+    editorUserId = expectedUser.id;
     isDirty = false;
     stepIndex = Math.min(audit.currentStep || 0, AUDIT_DATA.STEPS.length - 1);
     openModal();
