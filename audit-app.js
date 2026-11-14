@@ -1001,6 +1001,7 @@ const AUDIT_APP = (() => {
     try {
     // Não permitir conclusão com seções sem revisão explícita.
     await evidenceSaveFinished;
+    if (!isCurrentCompletion()) return;
     captureForm();
     const validation = AUDIT_VALIDATION.review(audit);
     if (!validation.valid) {
@@ -1021,6 +1022,7 @@ const AUDIT_APP = (() => {
     markDirty();
     try {
       await localSaveQueue.catch(() => {});
+      if (!isCurrentCompletion()) return;
       await AUDIT_STORAGE.saveAudit(completingRecord);
       if (!isCurrentCompletion()) return;
     } catch (error) {
