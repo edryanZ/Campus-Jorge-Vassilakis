@@ -307,7 +307,13 @@
           <label class="asset-full">Observações<textarea name="notes" maxlength="500" rows="2"></textarea></label>
           <button class="audit-primary asset-full" type="submit">Salvar registro neste dispositivo</button>
         </form>
-        <div class="asset-list-heading"><strong>Registros desta conta e dispositivo</strong><button id="assetRefreshBtn" class="audit-secondary" type="button">Atualizar</button></div>
+        <div class="asset-list-heading">
+          <strong>Registros desta conta e dispositivo</strong>
+          <div class="asset-list-actions">
+            <button id="assetExportBtn" class="audit-secondary" type="button">Exportar CSV</button>
+            <button id="assetRefreshBtn" class="audit-secondary" type="button">Atualizar</button>
+          </div>
+        </div>
         <div id="assetList" class="asset-list"></div>
       </div>
     </section>
