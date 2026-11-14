@@ -727,6 +727,17 @@ body { display: flex; flex-direction: column; height: 100dvh; }
   .asset-form { grid-template-columns: minmax(0, 1fr); }
 }
 
+/* Conferência da coleta — explícita e legível em mobile. */
+.audit-review-confirm {
+  display: flex !important; align-items: flex-start; gap: 12px; padding: 14px;
+  margin: 12px 0 0; border: 2px solid #97b7d2; border-radius: 12px;
+  background: #edf6ff; color: #123852; line-height: 1.45;
+  font-size: 14px; font-weight: 700;
+}
+.audit-review-confirm input { width: 22px; height: 22px; flex: 0 0 22px; accent-color: #12659a; }
+#exportAuditBackupBtn { width: 100%; min-height: 43px; }
+#exportAuditBackupBtn[hidden] { display: none !important; }
+
 /* Ajuste fino de ações para telas pequenas. */
 .asset-list-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .asset-list-actions button { min-height: 40px; }
