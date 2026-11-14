@@ -1,5 +1,15 @@
 # Histórico de alterações
 
+## 2026-11-14 — Limpeza adicional: sincronização parcial, troca de salas e cache seguro
+
+- `audit-remote.js`: depois de enviar auditorias pendentes, falhas de `pullRemote()` não anulam o resultado dos envios. Incluído `recoveryError` distinto e indicação `ALREADY_SYNCING` para evitar mensagem enganosa de falha geral.
+- `audit-app.js`: texto de sincronização distingue envio de download; a abertura de auditoria ignora retornos tardios quando outra sala/tela está ativa, sem regravar o formulário errado.
+- `sw.js`: navegações interceptadas limitadas a caminhos explícitos do aplicativo; páginas desconhecidas não são capturadas; respostas de navegação com parâmetros de autenticação na URL não são salvas no Cache Storage; cache atualizado para `v16-5-2`.
+- `tests/limpeza-estabilidade-v16-5-2.test.cjs`: 5 cenários de regressão novos (troca de salas, sincronização com recuperação indisponível, concorrência, PWA e sintaxe).
+- 57 verificações totais de lógica e estrutura aprovadas em simulação JavaScript. Não houve testes de dispositivo real, autenticação de duas contas ou implantação.
+- Mantidos todos os rascunhos, evidências, identificadores, políticas Supabase e `main`.
+
+
 ## 2026-11-14 — Revisão de código, desempenho, segurança e interface (branch de testes)
 
 - `audit-app.js`: a captura do formulário agora ignora valores e confirmações idênticos, reduzindo mutações, gravações no IndexedDB e sincronizações desnecessárias. Trocar de etapa sempre cria mutação distinta para impedir confirmação tardia de uma etapa antiga.
