@@ -1366,6 +1366,7 @@ const AUDIT_APP = (() => {
   let centerIsAdmin = false;
   let centerCanAudit = false;
   let centerFocus = null;
+  let centerSearchTimer = null;
 
   function centerStatus(item) {
     return item.status === 'COMPLETED' ? 'Concluída' : item.status === 'IN_PROGRESS' ? 'Em andamento' : 'Rascunho';
@@ -1566,6 +1567,7 @@ const AUDIT_APP = (() => {
 
   function closeCenter() {
     ++centerRequestId;
+    clearTimeout(centerSearchTimer);
     centerModal.hidden = true;
     if (modal.hidden && authModal.hidden) document.body.classList.remove('audit-open');
     centerFocus?.focus();
@@ -1573,8 +1575,15 @@ const AUDIT_APP = (() => {
 
   centerButton.addEventListener('click', openCenter);
   centerModal.querySelectorAll('[data-center-close]').forEach(button => button.addEventListener('click', closeCenter));
-  centerSearch.addEventListener('input', renderCenter);
-  centerFilter.addEventListener('change', renderCenter);
+  // Evita reconstruir centenas de cards a cada tecla em celulares modestos.
+  centerSearch.addEventListener('input', () => {
+    clearTimeout(centerSearchTimer);
+    centerSearchTimer = setTimeout(renderCenter, 130);
+  });
+  centerFilter.addEventListener('change', () => {
+    clearTimeout(centerSearchTimer);
+    renderCenter();
+  });
   window.addEventListener('keydown', event => {
     if (event.key === 'Escape' && !centerModal.hidden) {
       event.preventDefault();
@@ -1620,6 +1629,7 @@ const AUDIT_APP = (() => {
     if (_event === 'TOKEN_REFRESHED' && nextUserId === currentSessionUserId &&
         currentAccess?.canAudit) return; // Não recarregar UI e listas a cada token.
     if (currentSessionUserId && currentSessionUserId !== nextUserId) {
+      clearTimeout(centerSearchTimer);
       ++centerRequestId;
       centerRecords = [];
       centerResults.replaceChildren();
