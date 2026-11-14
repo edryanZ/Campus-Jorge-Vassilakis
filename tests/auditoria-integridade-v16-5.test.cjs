@@ -131,7 +131,7 @@ test('backup preserva fotografias próprias e não exporta registros privados de
       async getDeviceId(){return 'DEVICE-A'},
       async listAudits(){return [a,b,old]},
       async listEvidence(){return [
-        {evidenceId:'FOTO-A',auditId:a.auditId,blob:new Blob([new Uint8Array([9,8,7])]),syncState:'LOCAL_ONLY'},
+        {evidenceId:'FOTO-A',auditId:a.auditId,mimeType:'image/jpeg',blob:new Blob([new Uint8Array([9,8,7])]),syncState:'LOCAL_ONLY'},
         {evidenceId:'FOTO-B',auditId:b.auditId,blob:new Blob([new Uint8Array([4,5])]),syncState:'LOCAL_ONLY'}
       ]},
       async listConflicts(){return []}
@@ -152,4 +152,5 @@ test('backup preserva fotografias próprias e não exporta registros privados de
   assert.ok(!manifest.audits.some(item=>item.auditId===b.auditId));
   assert.equal(manifest.evidence.length,1);
   assert.equal(manifest.evidence[0].evidenceId,'FOTO-A');
+  assert.ok(manifest.evidence[0].archivePath.endsWith('.jpg'));
 });
