@@ -726,3 +726,11 @@ body { display: flex; flex-direction: column; height: 100dvh; }
 @media (max-width: 640px) {
   .asset-form { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Ajuste fino de ações para telas pequenas. */
+.asset-list-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.asset-list-actions button { min-height: 40px; }
+@media (max-width: 460px) {
+  .asset-list-heading { align-items: flex-start; flex-wrap: wrap; }
+  .asset-list-actions { width: 100%; justify-content: flex-start; }
+}
