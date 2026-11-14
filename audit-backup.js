@@ -128,7 +128,13 @@ const AUDIT_BACKUP = (() => {
     };
     // O JSON fica no ZIP; a versão pública não contém dados privados.
     const entries = [{ name: 'manifest.json', blob: new Blob([JSON.stringify(manifest, null, 2)], { type: 'application/json' }) }, ...files];
-    return { archive: await buildZip(entries), auditCount: audits.length, photoCount: files.length, missingPhotos };
+    const archive = await buildZip(entries);
+    // A montagem pode durar vários segundos com fotografias grandes.
+    // Se a conta mudou durante a operação, não entregar dados ao novo usuário.
+    const currentUser = await AUDIT_REMOTE.sessionUser();
+    if (currentUser?.id !== user.id)
+      throw Error('A conta mudou durante o backup. Entre novamente e repita a exportação.');
+    return { archive, auditCount: audits.length, photoCount: files.length, missingPhotos };
   }
   async function download() {
     button.disabled = true;
