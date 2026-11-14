@@ -108,6 +108,9 @@ test('conclusão espera imagem pendente antes de salvar', async () => {
     const content = {innerHTML:'',querySelector(){return {addEventListener(){}};}};
     const AUDIT_DATA = {STATUS:{COMPLETED:'COMPLETED'}};
     const AUDIT_REMOTE = {configured:false};
+    const AUDIT_VALIDATION = {review:()=>({valid:true,errors:[]})};
+    class Event { constructor(name) { this.type = name; } }
+    let isDirty = false;
     const navigator = {onLine:false};
     const localSaveQueue = Promise.resolve();
     const AUDIT_STORAGE = {
@@ -118,7 +121,7 @@ test('conclusão espera imagem pendente antes de salvar', async () => {
     const markDirty = () => {};
     const captureForm = () => {};
     const escapeHtml = value => String(value);
-    const window = {alert(){}};
+    const window = {alert(){},dispatchEvent(){}};
     const alert = () => {};
     let stepIndex = 8;
     const renderStep = () => {};
@@ -256,7 +259,7 @@ test('criação de auditoria usa a RPC existente e mantém proteção contra dup
   assert.match(segment, /isActiveUniqueViolation/);
   const calls = [];
   const create = new Function(
-    'currentUser', 'client', 'navigator', 'getAccess', 'newId',
+    'sessionUser', 'client', 'navigator', 'getAccess', 'newId',
     'AUDIT_SYNC_CORE', 'AUDIT_STORAGE', 'remoteToLocal', 'findRemoteActive',
     segment + 'return resumeOrCreateActive;'
   )(
