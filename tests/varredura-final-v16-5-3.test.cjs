@@ -197,3 +197,50 @@ test('solicitações de participação não reabrem dados de antigo administrado
   assert.equal(fixture.state().count,0);
   assert.equal(fixture.state().status,'');
 });
+
+
+test('RPC de auditoria compartilhada rejeita troca de conta durante a resposta', async () => {
+  const source=read('audit-remote.js');
+  const start=source.indexOf('  async function getSharedAudit(auditId) {');
+  const end=source.indexOf('  async function findRemoteActive(',start);
+  assert.ok(start>=0&&end>start);
+  let userId='AUDITOR-A-FICTICIO';
+  let started;
+  const active=new Promise(resolve=>{started=resolve});
+  let release;
+  const gate=new Promise(resolve=>{release=resolve});
+  const make=new Function('sessionUser','getAccess','client','navigator','remoteToLocal',
+    source.slice(start,end)+'return getSharedAudit;');
+  const get=make(
+    async()=>({id:userId}),
+    async()=>({userId:'AUDITOR-A-FICTICIO',canAudit:true,offline:false}),
+    {rpc:async()=>{started();await gate;return {data:{owner_id:'RESPONSAVEL-FICTICIO'}}}},
+    {onLine:true},
+    row=>({ownerId:row.owner_id})
+  );
+  const operation=get('AUDITORIA-FICTICIA');
+  await active;
+  userId='AUDITOR-B-FICTICIO';
+  release();
+  let error=null;
+  try {await operation;}catch(e){error=e}
+  assert.ok(error,'A troca de conta precisa impedir a recuperação.');
+  assert.match(error.message,/conta mudou/i);
+});
+
+test('RPC compartilhada normal vincula edição ao auditor original da sessão', async () => {
+  const source=read('audit-remote.js');
+  const start=source.indexOf('  async function getSharedAudit(auditId) {');
+  const end=source.indexOf('  async function findRemoteActive(',start);
+  const make=new Function('sessionUser','getAccess','client','navigator','remoteToLocal',
+    source.slice(start,end)+'return getSharedAudit;');
+  const get=make(
+    async()=>({id:'AUDITOR-A-FICTICIO'}),
+    async()=>({userId:'AUDITOR-A-FICTICIO',canAudit:true,offline:false}),
+    {rpc:async()=>({data:{owner_id:'RESPONSAVEL-FICTICIO'}})},
+    {onLine:true},
+    row=>({ownerId:row.owner_id})
+  );
+  const record=await get('AUDITORIA-FICTICIA');
+  assert.equal(record.collaborationEditorId,'AUDITOR-A-FICTICIO');
+});
