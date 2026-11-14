@@ -1288,6 +1288,9 @@ const AUDIT_APP = (() => {
   });
   authForm.addEventListener('submit', async event => {
     event.preventDefault();
+    const button = authForm.querySelector('[type="submit"]');
+    if (button.disabled) return;
+    button.disabled = true;
     const values = new FormData(authForm);
     authStatus.className = 'auth-status';
     authStatus.textContent = 'Autenticando…';
@@ -1298,6 +1301,8 @@ const AUDIT_APP = (() => {
     } catch (error) {
       authStatus.className = 'auth-status is-error';
       authStatus.textContent = `Não foi possível entrar: ${error.message || error}`;
+    } finally {
+      button.disabled = false;
     }
   });
   async function hidePrivateEditorBeforeAccountChange() {
@@ -1328,6 +1333,8 @@ const AUDIT_APP = (() => {
     }
   });
   syncNowButton.addEventListener('click', async () => {
+    if (syncNowButton.disabled) return;
+    syncNowButton.disabled = true;
     authStatus.className = 'auth-status';
     authStatus.textContent = 'Sincronizando registros pendentes…';
     try {
@@ -1339,6 +1346,8 @@ const AUDIT_APP = (() => {
     } catch (error) {
       authStatus.className = 'auth-status is-error';
       authStatus.textContent = `Falha na sincronização: ${error.message || error}`;
+    } finally {
+      syncNowButton.disabled = false;
     }
   });
   refreshAccounts.addEventListener('click', loadAccessRequests);
@@ -1607,6 +1616,8 @@ const AUDIT_APP = (() => {
   let currentSessionUserId = null;
   AUDIT_REMOTE.onAuthStateChange(async (_event, user) => {
     const nextUserId = user?.id || null;
+    if (_event === 'TOKEN_REFRESHED' && nextUserId === currentSessionUserId &&
+        currentAccess?.canAudit) return; // Não recarregar UI e listas a cada token.
     if (currentSessionUserId && currentSessionUserId !== nextUserId) {
       ++centerRequestId;
       centerRecords = [];
