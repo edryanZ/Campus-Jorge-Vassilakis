@@ -125,3 +125,75 @@ test('arquivos essenciais mantêm sintaxe válida', () => {
   for(const path of ['audit-app.js','audit-remote.js','audit-backup.js','sw.js'])
     assert.doesNotThrow(()=>new vm.Script(read(path),{filename:path}));
 });
+
+
+test('solicitações administrativas antigas não reaparecem após troca de conta', async () => {
+  const app=read('audit-app.js');
+  const start=app.indexOf('  async function loadAccessRequests() {');
+  const end=app.indexOf('  async function reviewRequest(', start);
+  assert.ok(start>=0 && end>start);
+  let resolveQuery;
+  const serverReply=new Promise(resolve=>{resolveQuery=resolve});
+  const build=new Function('listAccessRequests', `
+    let currentAccess={admin:true,offline:false};
+    let authGeneration=1;
+    const adminPanel={hidden:false};
+    const adminList={elements:[],replaceChildren(){this.elements=[]},append(v){this.elements.push(v)}};
+    const adminStatus={textContent:''};
+    const AUDIT_REMOTE={listAccessRequests};
+    const document={createElement(){return {addEventListener(){},append(){}}}};
+    const reviewRequest=()=>{};
+    ${app.slice(start,end)}
+    return {
+      load:loadAccessRequests,
+      switchAccount(){
+        authGeneration++;
+        currentAccess=null;
+        adminPanel.hidden=true;
+        adminList.replaceChildren();
+        adminStatus.textContent='';
+      },
+      state(){return {count:adminList.elements.length,status:adminStatus.textContent}}
+    };
+  `);
+  const fixture=build(()=>serverReply);
+  const task=fixture.load();
+  fixture.switchAccount();
+  resolveQuery([{display_name:'USUÁRIO FICTÍCIO PARA TESTE',email:'test@example.invalid'}]);
+  await task;
+  assert.equal(fixture.state().count,0);
+  assert.equal(fixture.state().status,'');
+});
+
+test('solicitações de participação não reabrem dados de antigo administrador', async () => {
+  const app=read('audit-app.js');
+  const start=app.indexOf('  async function loadAuditParticipationRequests() {');
+  const end=app.indexOf('  async function reviewAuditParticipation(',start);
+  assert.ok(start>=0&&end>start);
+  let resolveQuery;
+  const serverReply=new Promise(resolve=>{resolveQuery=resolve});
+  const build=new Function('listRequests', `
+    let currentAccess={admin:true,offline:false};
+    let authGeneration=1;
+    const adminPanel={hidden:false};
+    const participationStatus={textContent:''};
+    const participationList={elements:[],replaceChildren(){this.elements=[]},append(v){this.elements.push(v)}};
+    const AUDIT_REMOTE={listAuditParticipationRequests:listRequests};
+    const AUDIT_DATA={getEnvironment(){return null}};
+    const document={createElement(){return {addEventListener(){},append(){}}}};
+    const reviewAuditParticipation=()=>{};
+    ${app.slice(start,end)}
+    return {
+      load:loadAuditParticipationRequests,
+      switchAccount(){authGeneration++;currentAccess=null;adminPanel.hidden=true;participationList.replaceChildren();participationStatus.textContent='';},
+      state(){return {count:participationList.elements.length,status:participationStatus.textContent}}
+    };
+  `);
+  const fixture=build(()=>serverReply);
+  const task=fixture.load();
+  fixture.switchAccount();
+  resolveQuery([{requester_name:'USUÁRIO FICTÍCIO PARA TESTE'}]);
+  await task;
+  assert.equal(fixture.state().count,0);
+  assert.equal(fixture.state().status,'');
+});
