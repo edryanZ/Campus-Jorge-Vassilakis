@@ -62,6 +62,7 @@ const CAMPUS_INSIGHTS = (() => {
     }
   }
   window.addEventListener('audit:access-updated', refresh);
+  window.addEventListener('audit:local-updated', refresh);
   window.addEventListener('focus', refresh);
   return Object.freeze({ summarize, refresh, clear });
 })();
