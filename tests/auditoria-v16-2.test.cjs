@@ -111,6 +111,10 @@ test('conclusão espera imagem pendente antes de salvar', async () => {
     const AUDIT_VALIDATION = {review:()=>({valid:true,errors:[]})};
     class Event { constructor(name) { this.type = name; } }
     let isDirty = false;
+    let completionInFlight = false;
+    let editorUserId = 'USER-TEST';
+    const environment = { environmentId: 'SALA-TESTE' };
+    const modal = { hidden: false };
     const navigator = {onLine:false};
     const localSaveQueue = Promise.resolve();
     const AUDIT_STORAGE = {
