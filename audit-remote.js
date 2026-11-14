@@ -378,7 +378,8 @@ const AUDIT_REMOTE = (() => {
   }
 
   async function syncAuditOnce(record) {
-    const user = await currentUser();
+    // A consulta de perfil e a RLS conferem autorização; evite chamada Auth extra.
+    const user = await sessionUser();
     const access = await getAccess();
     if (!client || !user || !navigator.onLine || AUDIT_SYNC_CORE.isRecoveryAudit(record) || !access?.canAudit || access.offline)
       return { skipped: true, reason: access?.offline ? 'SERVER_UNAVAILABLE' : 'UNAUTHORIZED' };
@@ -510,14 +511,19 @@ const AUDIT_REMOTE = (() => {
   }
 
   async function pullRemote() {
-    const user = await currentUser();
     const access = await getAccess();
+    const user = await sessionUser();
     if (!client || !user || !navigator.onLine || !access?.canAudit || access.offline)
       return { skipped: true, reason: access?.offline ? 'SERVER_UNAVAILABLE' : 'UNAUTHORIZED' };
-    const result = await client.from('audits').select('*').order('updated_at', { ascending: false });
-    if (result.error) throw result.error;
+    // Inclusive para ADMIN: copiar automaticamente somente rascunhos próprios.
+    // Dados de terceiros são consultados sob demanda, não armazenados em massa.
+    const result = await queryWithDeadline(
+      client.from('audits').select('*').eq('owner_id', user.id)
+        .order('updated_at', { ascending: false }).limit(500),
+      'Recuperação de auditorias próprias');
     let conflicts = 0;
     for (const row of result.data || []) {
+      if (row.owner_id !== user.id) continue;
       const remote = remoteToLocal(row);
       const local = await AUDIT_STORAGE.getAudit(remote.auditId);
       if (!local) {
@@ -546,9 +552,8 @@ const AUDIT_REMOTE = (() => {
     const access = user ? await getAccess() : null;
     const items = [];
     if (user && access?.canAudit) {
-      // Nunca filtrar owner_id no cliente: RLS permite ao ADMIN consultar os registros autorizados de outros auditores.
-      // Auditor comum vê apenas seus próprios registros, independentemente de uma
-      // política de banco temporariamente mais ampla. ADMIN não filtra o proprietário.
+      // RLS já restringe acesso por proprietário/ADMIN; repetir no cliente
+      // como defesa em profundidade sem impedir a consulta administrativa.
       let authorizedQuery = client.from('audits')
         .select('id,environment_id,status,updated_at,completed_at,server_revision,owner_id,sync_complete,is_public');
       if (!access.admin) authorizedQuery = authorizedQuery.eq('owner_id', user.id);
