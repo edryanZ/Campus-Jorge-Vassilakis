@@ -90,7 +90,9 @@ const AUDIT_BACKUP = (() => {
     ]);
     const canInclude = record => access.admin || record.ownerId === user.id ||
       record.collaborationEditorId === user.id ||
-      (!record.ownerId && record.localOwnerKey === deviceKey);
+      // Registros v13/v14 podem existir sem qualquer proprietário. Não ignorá-los
+      // no backup do aparelho em que já se encontram, mantendo identificação legada.
+      (!record.ownerId && (!record.localOwnerKey || record.localOwnerKey === deviceKey));
     const audits = allAudits.filter(canInclude);
     const ids = new Set(audits.map(item => item.auditId));
     const evidence = allEvidence.filter(item => ids.has(item.auditId));
