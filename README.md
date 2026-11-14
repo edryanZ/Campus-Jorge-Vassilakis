@@ -1,4 +1,4 @@
-# Mapa interativo – Campus Jorge Vassilakis (v16.3 em validação)
+# Mapa interativo – Campus Jorge Vassilakis (main v16.3; branch de testes v16.5.2)
 
 Mapa estático e interativo em HTML, CSS, JavaScript e SVG, criado com base na planta de referência e nas informações confirmadas do Campus Jorge Vassilakis.
 
@@ -207,3 +207,13 @@ Nesta branch de trabalho:
 ### Ensaios antes de liberar as correções
 
 Faça testes em uma cópia/ambiente de ensaio, com conta aprovada: login, alteração de campo e salvamento local, navegação entre etapas, reabertura após fechar a aba, câmera e upload de evidência, exportação ZIP, conta com participação aprovada, atualização PWA offline e tela mobile/desktop. Não apague cookies ou armazenamento do dispositivo original onde estão os rascunhos reais. A prévia autenticada na Vercel ainda não foi confirmada nesta rodada.
+
+
+## Rodada adicional de estabilidade — 14/11/2026
+
+- Ao sincronizar, uma falha apenas na recuperação dos dados do servidor **não é confundida com falha dos envios já confirmados**. A Central informa separadamente a recuperação pendente.
+- A abertura de uma sala descarta respostas atrasadas se a pessoa selecionou outra sala ou acessou outra tela enquanto a consulta ocorria, evitando exibir a auditoria do ambiente errado.
+- A PWA armazena offline apenas as páginas e arquivos conhecidos. URLs de retorno do login contendo parâmetros como `?code=` não são gravadas no cache; páginas desconhecidas não são interceptadas.
+- A bateria de testes de lógica e estrutura tem agora 57 cenários: 52 regressões existentes mais 5 específicos para troca de sala, sincronização parcial, sincronização simultânea e cache. Não são testes autenticados no navegador.
+
+Não houve alteração de dados do banco, fotos, salas, identificadores nem publicação na `main`.
