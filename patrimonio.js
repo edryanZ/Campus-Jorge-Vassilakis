@@ -14,6 +14,8 @@ const CAMPUS_PATRIMONY = (() => {
     ATENCAO:'Requer manutenção', FORA_DE_USO:'Fora de uso'
   });
   let database, generation = 0;
+  let openedForUserId = null;
+  let previousFocus = null;
   function normalize(data) {
     const tombo = String(data.tombo || '').trim().toUpperCase();
     const description = String(data.description || '').trim();
@@ -74,13 +76,17 @@ const CAMPUS_PATRIMONY = (() => {
     return user;
   }
   function close() {
+    const wasOpen = !modal.hidden;
     ++generation;
     modal.hidden = true;
+    openedForUserId = null;
     listing.replaceChildren();
     form.hidden = true;
     form.reset();
     if (['authModal','auditModal','auditCenterModal'].every(id => document.getElementById(id).hidden))
       document.body.classList.remove('audit-open');
+    if (wasOpen) (previousFocus?.isConnected ? previousFocus : button).focus?.();
+    previousFocus = null;
   }
   function render(item) {
     const card = document.createElement('article');
@@ -107,6 +113,7 @@ const CAMPUS_PATRIMONY = (() => {
       const user = await authorized();
       const records = await listFor(user.id);
       if (request !== generation) return;
+      openedForUserId = user.id;
       form.hidden = false;
       countLabel.textContent = records.length ? records.length + ' bem(ns) neste dispositivo' : 'Cadastrar tombos';
       const visible = records.filter(item => !envPicker.value || item.environmentId === envPicker.value);
@@ -122,8 +129,10 @@ const CAMPUS_PATRIMONY = (() => {
     }
   }
   async function open(mapId = '') {
+    previousFocus = document.activeElement;
     modal.hidden = false;
     form.hidden = true;
+    requestAnimationFrame(() => modal.querySelector('[data-asset-close]')?.focus());
     document.body.classList.add('audit-open');
     const environment = mapId && AUDIT_DATA.getEnvironmentByMapId(mapId);
     envPicker.value = environment?.environmentId || '';
@@ -159,8 +168,10 @@ const CAMPUS_PATRIMONY = (() => {
       const a = document.createElement('a');
       a.href = url;
       a.download = 'inventario-auxiliar-campus-' + new Date().toISOString().slice(0,10) + '.csv';
+      document.body.appendChild(a);
       a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
       status.textContent = 'Exportado para conferência. Não é inventário oficial da UNIR.';
     } catch (error) { status.textContent = 'Falha ao exportar: ' + (error.message || error); }
   });
@@ -185,9 +196,13 @@ const CAMPUS_PATRIMONY = (() => {
     if (!event.detail?.authorized) { close(); countLabel.textContent = 'Cadastrar tombos'; }
     else if (!modal.hidden) refresh();
   });
-  AUDIT_REMOTE.onAuthStateChange(() => {
-    if (!modal.hidden) close();
-    countLabel.textContent = 'Cadastrar tombos';
+  // INITIAL_SESSION e TOKEN_REFRESHED não devem fechar o formulário:
+  // a sessão pode renovar automaticamente enquanto a pessoa preenche o bem.
+  AUDIT_REMOTE.onAuthStateChange((_event, user) => {
+    if (!user || (openedForUserId && openedForUserId !== user.id)) {
+      if (!modal.hidden) close();
+      countLabel.textContent = 'Cadastrar tombos';
+    }
   });
   return Object.freeze({ normalize, open, refresh });
 })();
