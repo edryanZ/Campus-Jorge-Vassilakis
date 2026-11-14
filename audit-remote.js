@@ -547,8 +547,12 @@ const AUDIT_REMOTE = (() => {
     const items = [];
     if (user && access?.canAudit) {
       // Nunca filtrar owner_id no cliente: RLS permite ao ADMIN consultar os registros autorizados de outros auditores.
-      const owned = await queryWithDeadline(client.from('audits')
-        .select('id,environment_id,status,updated_at,completed_at,server_revision,owner_id,sync_complete,is_public')
+      // Auditor comum vê apenas seus próprios registros, independentemente de uma
+      // política de banco temporariamente mais ampla. ADMIN não filtra o proprietário.
+      let authorizedQuery = client.from('audits')
+        .select('id,environment_id,status,updated_at,completed_at,server_revision,owner_id,sync_complete,is_public');
+      if (!access.admin) authorizedQuery = authorizedQuery.eq('owner_id', user.id);
+      const owned = await queryWithDeadline(authorizedQuery
         .order('updated_at', { ascending: false }).limit(1000), 'Consulta de auditorias autorizadas');
       for (const row of owned.data || []) {
         items.push({
@@ -599,10 +603,16 @@ const AUDIT_REMOTE = (() => {
   // Histórico privado: consulta somente leitura e limitada ao ambiente.
   // A segurança dos registros permanece a cargo do RLS do Supabase.
   async function listPrivateHistory(environmentId) {
-    if (!client || !navigator.onLine || !(await getAccess())?.canAudit) return [];
-    const result = await queryWithDeadline(client.from('audits')
+    const access = await getAccess();
+    if (!client || !navigator.onLine || !access?.canAudit) return [];
+    const user = await sessionUser();
+    if (!user) return [];
+    let query = client.from('audits')
       .select('id,environment_id,status,updated_at,completed_at,owner_id,server_revision,sync_complete')
-      .eq('environment_id', environmentId).order('updated_at', { ascending: false }).limit(50), 'Consulta de histórico remoto');
+      .eq('environment_id', environmentId);
+    if (!access.admin) query = query.eq('owner_id', user.id);
+    const result = await queryWithDeadline(
+      query.order('updated_at', { ascending: false }).limit(50), 'Consulta de histórico remoto');
     return (result.data || []).map(row => ({
       auditId: row.id, environmentId: row.environment_id, status: row.status,
       updatedAt: row.updated_at, completedAt: row.completed_at, ownerId: row.owner_id,
@@ -612,9 +622,14 @@ const AUDIT_REMOTE = (() => {
   }
 
   async function getPrivateHistoryRecord(auditId) {
-    if (!client || !navigator.onLine || !(await getAccess())?.canAudit)
+    const access = await getAccess();
+    if (!client || !navigator.onLine || !access?.canAudit)
       throw new Error('Entre com uma conta de auditor autorizada e conectada para consultar o servidor.');
-    const result = await queryWithDeadline(client.from('audits').select('*').eq('id', auditId).maybeSingle(), 'Consulta do registro remoto');
+    const user = await sessionUser();
+    if (!user) throw new Error('Sessão encerrada: entre novamente.');
+    let query = client.from('audits').select('*').eq('id', auditId);
+    if (!access.admin) query = query.eq('owner_id', user.id);
+    const result = await queryWithDeadline(query.maybeSingle(), 'Consulta do registro remoto');
     if (!result.data) throw new Error('Registro não encontrado ou sem permissão de acesso.');
     return remoteToLocal(result.data);
   }
