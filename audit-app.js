@@ -1340,10 +1340,15 @@ const AUDIT_APP = (() => {
     authStatus.textContent = 'Sincronizando registros pendentes…';
     try {
       const result = await AUDIT_REMOTE.syncPending();
-      authStatus.className = result.failed ? 'auth-status is-error' : 'auth-status is-success';
+      authStatus.className = result.failed || result.recoveryError ? 'auth-status is-error' : 'auth-status is-success';
       authStatus.textContent = result.skipped
-        ? 'Nada foi enviado. Verifique a conexão e a autorização.'
-        : `${result.synced} registro(s) sincronizado(s); ${result.failed} falha(s); ${result.pendingEvidence || 0} evidência(s) pendente(s).`;
+        ? result.reason === 'ALREADY_SYNCING'
+          ? 'Já existe uma sincronização em andamento. Aguarde sua conclusão e consulte o histórico.'
+          : 'Nada foi enviado. Verifique a conexão e a autorização.'
+        : `${result.synced} registro(s) sincronizado(s); ${result.failed} falha(s); ${result.pendingEvidence || 0} evidência(s) pendente(s).` +
+          (result.recoveryError
+            ? ' O envio foi processado, mas não foi possível atualizar as cópias remotas: ' + result.recoveryError
+            : '');
     } catch (error) {
       authStatus.className = 'auth-status is-error';
       authStatus.textContent = `Falha na sincronização: ${error.message || error}`;
