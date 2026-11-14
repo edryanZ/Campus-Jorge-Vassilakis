@@ -224,15 +224,20 @@ const AUDIT_REMOTE = (() => {
   }
 
   async function getSharedAudit(auditId) {
-    if (!(await getAccess())?.canAudit || !navigator.onLine)
+    const initialUser = await sessionUser();
+    const access = await getAccess();
+    if (!initialUser || access?.userId !== initialUser.id ||
+        !access.canAudit || access.offline || !navigator.onLine)
       throw new Error('É necessário estar conectado para continuar a auditoria compartilhada.');
     const { data, error } = await client.rpc('get_shared_audit', { p_audit_id: auditId });
     if (error) throw error;
     const row = Array.isArray(data) ? data[0] : data;
     if (!row) throw new Error('A auditoria compartilhada não está disponível.');
-    const user = await sessionUser();
+    const currentUser = await sessionUser();
+    if (currentUser?.id !== initialUser.id)
+      throw new Error('A conta mudou durante a consulta. Entre novamente para continuar a auditoria compartilhada.');
     const record = remoteToLocal(row);
-    if (record.ownerId !== user?.id) record.collaborationEditorId = user.id;
+    if (record.ownerId !== initialUser.id) record.collaborationEditorId = initialUser.id;
     return record;
   }
 
