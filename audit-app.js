@@ -882,6 +882,7 @@ const AUDIT_APP = (() => {
       return { superseded: true };
     }
     isDirty = false;
+    window.dispatchEvent(new Event('audit:local-updated'));
     saveState.textContent = AUDIT_REMOTE.configured
       ? (navigator.onLine ? '✓ Salvo localmente · aguardando sincronização' : '✓ Salvo localmente · aguardando internet')
       : '✓ Salvo localmente · Supabase não configurado';
@@ -932,6 +933,7 @@ const AUDIT_APP = (() => {
       return;
     }
     isDirty = false;
+    window.dispatchEvent(new Event('audit:local-updated'));
     saveState.textContent = '✓ Auditoria concluída e salva localmente · aguardando sincronização';
     let remoteMessage = 'O registro permanece neste dispositivo até que a sincronização seja confirmada.';
     if (AUDIT_REMOTE.configured && navigator.onLine) {
