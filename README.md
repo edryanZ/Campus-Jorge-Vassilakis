@@ -17,6 +17,14 @@ Depois acesse `http://localhost:8000`.
 
 O projeto não exige instalação de dependências nem processo de compilação. A biblioteca `supabase-js` está fixada na versão `2.117.3` por CDN e é armazenada pelo service worker após o primeiro carregamento bem-sucedido.
 
+## Primeiras entregas do painel ambiental e patrimônio (branch de testes)
+
+A faixa de indicadores mostra energia, água, papel, auditorias e patrimônio. Para contas aprovadas, os números de lâmpadas LED e fluorescentes, os registros de instalações hidráulicas e a quantidade de ambientes auditados vêm apenas do armazenamento **local da conta autorizada**, sem representar o total oficial do campus. Isso não equivale a consumo medido nem a nota de sustentabilidade. Papel requer levantamento por setor e metodologia aprovada.
+
+O painel **Patrimônio** oferece cadastro auxiliar de tombos existentes (etiqueta, descrição, localização, estado e observações). Os registros ficam somente no IndexedDB deste navegador e nesta conta, sem comunicação com o patrimônio oficial nem sincronização. Atribuição de tombo oficial, importação institucional, correção de bens e cópia de segurança permanecem futuras. Guarde uma cópia externa dos dados relevantes até que exista mecanismo institucional validado.
+
+O service worker usa cache v16.4 e inclui os novos módulos, evitando arquivos antigos após atualização. O mapa no celular abre com a planta enquadrada e travada; a movimentação pode ser habilitada pelo usuário. Testes de acesso real, visualização mobile e políticas remotas ainda são necessários antes da publicação.
+
 ## Histórico: segurança e sincronização v15
 
 A auditoria só recebe `SYNCED` depois que a revisão do PostgreSQL, cada objeto do Storage, o metadado com SHA-256 e a função `finalize_audit_sync` são confirmados. Falhas parciais mantêm blobs no IndexedDB e produzem `PENDING` ou `ERROR`. O caminho remoto é determinístico, evitando duplicação em retentativas.
