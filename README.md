@@ -190,3 +190,20 @@ As correções foram preparadas e testadas na branch `fix-auditoria-sincronizaca
 - A importação automática do Supabase é limitada às auditorias do proprietário autenticado. Administradores podem consultar outros usuários na Central, sem fazer cópias locais indiscriminadas.
 - **Retificação de RLS:** políticas v16.1 verificadas são RESTRICTIVE e restringem o acesso por proprietário ou ADMIN. O diagnóstico que sugeria exposição generalizada foi corrigido e o SQL de remoção cancelado. Nenhuma política do banco de produção foi alterada.
 - O domínio de produção, a câmera de um aparelho real e as credenciais do administrador ainda precisam de teste antes da publicação.
+
+## Revisão de estabilidade e acessibilidade — 14/11/2026
+
+Nesta branch de trabalho:
+- o aplicativo evita salvar novamente quando não houve edição real no formulário, mas cria uma nova mutação ao mudar de etapa;
+- buscas na Central têm debounce curto para funcionar melhor em celulares modestos;
+- renovação automática de sessão não fecha o módulo auxiliar de patrimônio nem recarrega desnecessariamente as solicitações administrativas;
+- controles de mapa e navegação por teclado ficaram mais claros, com respeito ao movimento reduzido;
+- o Service Worker armazena só recursos identificados do aplicativo e remove exclusivamente caches anteriores desta PWA;
+- a exportação legada sem fotos foi retirada do módulo de armazenamento. Use **Minha conta → Exportar backup de auditorias com fotos (ZIP)**, que é uma cópia local sensível, sem criptografia e sem restauração automática;
+- ao verificar uma auditoria concluída, a data deve ser válida no calendário, além dos demais campos de conferência.
+
+**Não alteramos os ambientes, IDs de auditoria, fotos, tabelas nem permissões do Supabase.** A segurança do servidor continua baseada nas políticas RLS vigentes. O projeto não foi publicado na `main`.
+
+### Ensaios antes de liberar as correções
+
+Faça testes em uma cópia/ambiente de ensaio, com conta aprovada: login, alteração de campo e salvamento local, navegação entre etapas, reabertura após fechar a aba, câmera e upload de evidência, exportação ZIP, conta com participação aprovada, atualização PWA offline e tela mobile/desktop. Não apague cookies ou armazenamento do dispositivo original onde estão os rascunhos reais. A prévia autenticada na Vercel ainda não foi confirmada nesta rodada.
