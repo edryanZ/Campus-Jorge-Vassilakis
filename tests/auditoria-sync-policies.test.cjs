@@ -187,10 +187,14 @@ test('falha temporária do Supabase mantém acesso local previamente autorizado'
   };
   const remote = new Function('globalThis', 'window', 'navigator', 'AUDIT_STORAGE',
     'AUDIT_SYNC_CORE', 'localStorage', 'CustomEvent', 'crypto', 'structuredClone',
+    'AbortController', 'setTimeout', 'clearTimeout',
     file('audit-remote.js') + '\nreturn AUDIT_REMOTE;')(
       global, { addEventListener() {}, dispatchEvent() {} }, { onLine: true }, {},
       { isRecoveryAudit: () => false }, localStorage,
-      class FakeEvent {}, { randomUUID: () => 'test' }, clone
+      class FakeEvent {}, { randomUUID: () => 'test' }, clone,
+      class TestAbortController { constructor() { this.signal = { aborted: false }; }
+        abort() { this.signal.aborted = true; } },
+      () => 0, () => {}
     );
   const approved = await remote.getAccess();
   assert.equal(approved.canAudit, true);
