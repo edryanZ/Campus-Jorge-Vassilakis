@@ -426,6 +426,10 @@ function renderDetails(item) {
   closeButton.addEventListener('click', clearSelection);
   fragment.querySelector('.route-action').addEventListener('click', () => showRouteTo(item));
   fragment.querySelector('.focus-action').addEventListener('click', () => focusLocation(item.id));
+  const patrimonyButton = fragment.querySelector('.patrimony-action');
+  patrimonyButton.hidden = !window.AUDIT_DATA?.getEnvironmentByMapId(item.id);
+  patrimonyButton.addEventListener('click', () => window.dispatchEvent(
+    new CustomEvent('campus:patrimony-open', { detail: { mapId: item.id } })));
 
   const auditAction = fragment.querySelector('.audit-action');
   const historyAction = fragment.querySelector('.audit-history-action');
