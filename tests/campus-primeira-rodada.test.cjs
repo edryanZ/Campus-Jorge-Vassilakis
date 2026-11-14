@@ -26,7 +26,8 @@ test('painel: indicadores não são confundidos com medições reais', () => {
   for (const label of ['Energia', 'Água', 'Papel', 'Auditorias', 'Patrimônio']) assert.ok(html.includes(label));
   assert.match(html, /Consumo a mensurar/);
   assert.match(html, /Índice a levantar/);
-  assert.match(html, /Tombos: em preparação/);
+  assert.match(html, /id="overviewAssetsBtn"/);
+  assert.match(html, /Cadastrar tombos/);
   assert.match(css, /overview-grid/);
 });
 
