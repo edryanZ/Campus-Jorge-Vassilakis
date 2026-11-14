@@ -66,7 +66,7 @@ test('UI e PWA incluem módulos; não há dados oficiais predefinidos', () => {
   const html = read('index.html'), sw = read('sw.js'), source = read('patrimonio.js');
   for (const id of ['energyOverview','waterOverview','auditOverview','assetModal','assetEnvironment','assetExportBtn'])
     assert.ok(html.includes('id="' + id + '"'), id);
-  assert.match(sw, /campus-auditoria-v16-4/);
+  assert.match(sw, /campus-auditoria-v16-5/);
   assert.match(sw, /\.\/campus-insights\.js/);
   assert.match(sw, /\.\/patrimonio\.js/);
   assert.match(source, /INVENTARIO_AUXILIAR_LOCAL/);
@@ -78,7 +78,8 @@ test('consultas privadas filtram proprietário sem acesso ADMIN amplo no cliente
   const remote = read('audit-remote.js');
   assert.match(remote, /if \(!access\.admin\) authorizedQuery = authorizedQuery\.eq\('owner_id', user\.id\)/);
   assert.match(remote, /if \(!access\.admin\) query = query\.eq\('owner_id', user\.id\)/);
-  assert.ok(read('docs/seguranca/proposta-rls-20261113.sql').includes('drop policy if exists audits_v161_active_read'));
+  assert.match(read('docs/seguranca/proposta-rls-20261113.sql'), /CANCELADA/);
+  assert.match(read('docs/seguranca/risco-rls-20261113.md'), /RESTRICTIVE/);
 });
 
 test('scripts da rodada são sintaticamente válidos', () => {
