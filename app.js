@@ -47,7 +47,7 @@ function syncMapMode() {
   document.getElementById('zoomOutBtn').disabled = !mapUnlocked;
   mapHint.textContent = mapUnlocked
     ? 'Exploração ativa: arraste para mover, use o zoom ou escolha uma sala.'
-    : 'Mapa fixo e campus completo: toque numa sala ou use “Localizar sala ou setor”.';
+    : 'Mapa fixo: toque em uma sala para ver detalhes. Use “Visão geral” para mostrar todo o campus.';
 }
 
 function refreshLocationPicker() {
@@ -468,7 +468,7 @@ function clearSelection() {
   document.querySelectorAll('.map-feature').forEach(el => el.classList.remove('is-selected'));
   routeLayer.innerHTML = '';
   detailsPanel.classList.remove('is-open');
-  detailsPanel.setAttribute('aria-hidden', 'false');
+  detailsPanel.setAttribute('aria-hidden', String(mapBreakpoint.matches));
   detailsPanel.innerHTML = `
     <div class="details-empty">
       <div class="empty-icon">⌖</div>
@@ -705,8 +705,10 @@ function setupInteractions() {
     applyFilters();
   });
   mapMoveToggle.addEventListener('click', () => {
-    if (mapUnlocked) resetView();
-    else { mapUnlocked = true; syncMapMode(); }
+    // Fixar/desfixar não apaga o enquadramento escolhido: o botão
+    // independente "Visão geral" é responsável por restaurar o mapa.
+    mapUnlocked = !mapUnlocked;
+    syncMapMode();
   });
   mapResetButton.addEventListener('click', resetView);
   mapLocationPicker.addEventListener('change', () => {
