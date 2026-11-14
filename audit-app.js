@@ -15,6 +15,7 @@ const AUDIT_APP = (() => {
   let editGeneration = 0;
   let editorUserId = null;
   let localSaveQueue = Promise.resolve();
+  let savingWrites = 0;
   let evidenceWriteActive = false;
   let evidenceSaveFinished = Promise.resolve();
   const openLocks = new Map();
@@ -43,6 +44,7 @@ const AUDIT_APP = (() => {
       currentStep: 0,
       data: { identification: { date: localDate, startTime: localTime, inspector: '', responsible: '', notes: '' } },
       nonConformities: [],
+      reviewedSteps: {},
       evidenceIds: [],
       ownerId: owner?.startsWith('LOCAL:') ? null : owner,
       localOwnerKey: owner?.startsWith('LOCAL:') ? owner : null,
@@ -140,6 +142,7 @@ const AUDIT_APP = (() => {
     environment = AUDIT_DATA.getEnvironment(remote.environmentId);
     if (!environment) throw new Error('Ambiente da auditoria não encontrado no mapa.');
     await AUDIT_STORAGE.saveAudit(remote, { allowRemoteMerge: true, enforceActiveUniqueness: true });
+    remote.reviewedSteps ||= {};
     audit = remote;
     editorUserId = await AUDIT_REMOTE.ownerKey();
     isDirty = false;
@@ -256,6 +259,7 @@ const AUDIT_APP = (() => {
 
   async function showActiveDraft(record, owner, access) {
     if (!record || AUDIT_SYNC_CORE.isRecoveryAudit(record)) return;
+    record.reviewedSteps ||= {};
     audit = record;
     editorUserId = owner;
     isDirty = false;
@@ -653,10 +657,16 @@ const AUDIT_APP = (() => {
     title.textContent = step.title;
     environmentLabel.textContent = `${environment.blockName} · ${environment.roomNumber ? `Sala ${environment.roomNumber} — ` : ''}${environment.name}`;
     const progress = Math.round(((stepIndex + 1) / AUDIT_DATA.STEPS.length) * 100);
+    const sectionChecklist = AUDIT_VALIDATION.requiredSteps.includes(step.id)
+      ? `<label class="audit-review-confirm full">
+          <input data-review-confirm type="checkbox" ${audit.reviewedSteps?.[step.id] ? 'checked' : ''}>
+          <span>Revisei esta etapa e registrei os dados disponíveis. Se não foi possível avaliar, explique em Observações.</span>
+        </label>`
+      : '';
     content.innerHTML = `
       <div class="audit-progress"><div style="width:${progress}%"></div></div>
       <p class="audit-step-count">Etapa ${stepIndex + 1} de ${AUDIT_DATA.STEPS.length} · ${progress}%</p>
-      <form id="auditForm" class="audit-form">${stepMarkup(step.id)}</form>
+      <form id="auditForm" class="audit-form">${stepMarkup(step.id)}${sectionChecklist}</form>
       <nav class="audit-nav">
         <button type="button" class="audit-secondary" data-prev ${stepIndex === 0 ? 'disabled' : ''}>Voltar</button>
         ${stepIndex === AUDIT_DATA.STEPS.length - 1
@@ -676,8 +686,14 @@ const AUDIT_APP = (() => {
       }
     }
     const form = content.querySelector('#auditForm');
-    form.addEventListener('input', captureForm);
-    form.addEventListener('change', captureForm);
+    const saveUserInput = event => {
+      const confirmation = form.querySelector('[data-review-confirm]');
+      // Qualquer edição posterior exige nova conferência da etapa.
+      if (confirmation && event.target !== confirmation) confirmation.checked = false;
+      captureForm();
+    };
+    form.addEventListener('input', saveUserInput);
+    form.addEventListener('change', saveUserInput);
     content.querySelector('[data-prev]')?.addEventListener('click', () => navigate(-1));
     content.querySelector('[data-next]')?.addEventListener('click', () => navigate(1));
     content.querySelector('[data-complete]')?.addEventListener('click', completeAudit);
@@ -727,10 +743,17 @@ const AUDIT_APP = (() => {
   function slugName(value) { return String(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '_'); }
 
   function captureForm() {
-    const stepId = AUDIT_DATA.STEPS[stepIndex].id;
+    if (!audit || audit.status === AUDIT_DATA.STATUS.COMPLETED) return;
     const form = content.querySelector('#auditForm');
+    if (!form) return;
+    const stepId = AUDIT_DATA.STEPS[stepIndex].id;
     const values = Object.fromEntries(new FormData(form).entries());
     audit.data[stepId] = { ...(audit.data[stepId] || {}), ...values };
+    const reviewCheckbox = form.querySelector('[data-review-confirm]');
+    if (reviewCheckbox) {
+      audit.reviewedSteps ||= {};
+      audit.reviewedSteps[stepId] = reviewCheckbox.checked;
+    }
     markDirty();
     toggleConditionalFields();
     scheduleSave();
@@ -786,6 +809,8 @@ const AUDIT_APP = (() => {
     // Os campos são apenas um formulário temporário de inclusão. Não
     // reidratar a descrição anterior nem perder a inclusão no autosave.
     audit.data.nonConformities = {};
+    audit.reviewedSteps ||= {};
+    audit.reviewedSteps.nonConformities = false;
     markDirty();
     scheduleSave(true);
     renderStep();
@@ -825,6 +850,8 @@ const AUDIT_APP = (() => {
         throw new Error('O ambiente ativo mudou durante o salvamento da fotografia; o arquivo ficou preservado no dispositivo sem vínculo automático.');
       }
       audit.evidenceIds.push(evidenceId);
+      audit.reviewedSteps ||= {};
+      audit.reviewedSteps.nonConformities = false;
       markDirty();
       const saved = await scheduleSave(true);
       if (saved?.error) throw saved.error;
@@ -875,7 +902,9 @@ const AUDIT_APP = (() => {
     const transaction = localSaveQueue.catch(() => {}).then(() =>
       AUDIT_STORAGE.saveAudit(snapshot, { enforceActiveUniqueness: true }));
     localSaveQueue = transaction;
-    await transaction;
+    savingWrites += 1;
+    try { await transaction; }
+    finally { savingWrites -= 1; }
     if (!audit || audit.auditId !== snapshot.auditId) return { superseded: true };
     if (editGeneration !== savedGeneration) {
       scheduleSave();
@@ -905,13 +934,17 @@ const AUDIT_APP = (() => {
   }
 
   async function completeAudit() {
-    // Uma fotografia grande pode estar sendo salva enquanto a pessoa clica
-    // em concluir. Aguardar para não finalizar com o manifesto incompleto.
+    // Não permitir conclusão com seções sem revisão explícita.
     await evidenceSaveFinished;
     captureForm();
-    if (!audit.data.identification?.inspector?.trim()) {
-      alert('Informe o nome do(a) auditor(a) na etapa de identificação antes de concluir.');
-      stepIndex = 0;
+    const validation = AUDIT_VALIDATION.review(audit);
+    if (!validation.valid) {
+      saveState.textContent = '⚠ Auditoria não concluída: falta revisar ou registrar informações.';
+      window.alert('A auditoria permanece como rascunho.\n\n' +
+        validation.errors.map(item => '• ' + item.message).join('\n'));
+      const missingIndex = AUDIT_DATA.STEPS.findIndex(step => step.id === validation.firstStep);
+      if (missingIndex >= 0) stepIndex = missingIndex;
+      scheduleSave(true);
       renderStep();
       return;
     }
@@ -1516,6 +1549,24 @@ const AUDIT_APP = (() => {
       event.preventDefault();
       closeCenter();
     }
+  });
+
+  // No celular, abas podem ser suspensas sem um evento de saída completo.
+  // Persistência antecipada quando a página perde visibilidade.
+  function persistOnBackground() {
+    if (!audit || modal.hidden || audit.status === AUDIT_DATA.STATUS.COMPLETED) return;
+    if (content.querySelector('#auditForm')) captureForm();
+    clearTimeout(saveTimer);
+    saveNow({ scheduleRemote: false }).catch(showLocalSaveError);
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') persistOnBackground();
+  });
+  window.addEventListener('pagehide', persistOnBackground);
+  window.addEventListener('beforeunload', event => {
+    if (!audit || modal.hidden || (!isDirty && !savingWrites && !evidenceWriteActive)) return;
+    event.preventDefault();
+    event.returnValue = '';
   });
 
   window.addEventListener('audit:start', event => openAudit(event.detail.mapId));
