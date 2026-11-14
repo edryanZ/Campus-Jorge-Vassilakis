@@ -1,5 +1,22 @@
 # Histórico de alterações
 
+## 2026-11-14 — Revisão de código, desempenho, segurança e interface (branch de testes)
+
+- `audit-app.js`: a captura do formulário agora ignora valores e confirmações idênticos, reduzindo mutações, gravações no IndexedDB e sincronizações desnecessárias. Trocar de etapa sempre cria mutação distinta para impedir confirmação tardia de uma etapa antiga.
+- Interface de acesso: envio de login e sincronização protegido contra cliques duplicados. A renovação automática do token não reconstrói a interface e listas administrativas quando a conta não mudou.
+- Central de Auditorias: pesquisa com atraso controlado de 130 ms para evitar reconstruir centenas de cartões a cada tecla; temporizador cancelado ao fechar e trocar de conta.
+- `audit-storage.js`: removido o método `exportAll` antigo que omitía os bytes das fotografias, substituído pelo backup ZIP completo já disponível. Nenhum registro IndexedDB foi alterado.
+- `audit-remote.js`: removida a função `currentUser` sem consumidores na aplicação, que causaria consulta Auth adicional desnecessária se invocada. RLS do Supabase permanece a autoridade sobre permissões.
+- `patrimonio.js`: o cadastro permanece aberto durante `TOKEN_REFRESHED` e `INITIAL_SESSION` da mesma conta; fecha ao sair/trocar de usuário. Foco retorna ao acionador ao fechar; CSV é acionado por link temporário anexado ao documento para maior compatibilidade móvel.
+- `audit-validation.js`: conferência de data também valida calendário real, rejeitando meses/dias impossíveis sem inventar informações de auditoria.
+- `audit-backup.js`: verifica novamente a identidade após montar o arquivo ZIP e recusa exportação caso a conta tenha mudado durante a geração.
+- `app.js`: o comando Fixar mapa passa a fixar de fato sem perder o enquadramento, e Visão geral continua restaurando a planta. Painel móvel vazio é ocultado da navegação assistiva.
+- `sw.js`: cache limitado a recursos explícitos do aplicativo, descartando apenas caches próprios de versões antigas; falhas de gravação no Cache Storage não impedem que um recurso de rede seja exibido.
+- `styles.css`: regras mobile consolidadas sem remover breakpoints relevantes; controles do mapa maiores, foco de teclado destacado, animações reduzidas conforme preferência do sistema.
+- Testes de regressão preservados e ampliados em `tests/refino-performance-seguranca.test.cjs`.
+- Nenhum commit foi feito na `main`, nem deploy, alteração de estrutura SQL, edição de dados reais, exclusão de fotos ou mudança de permissões.
+
+
 ## 2026-11-13 — Terceira rodada: proteção de coleta, backup e RLS corretamente identificado
 
 - Confirmado por consulta a pg_policies que regras *v161_active* são RESTRICTIVE e não ampliam acesso. Testes SQL de ADMIN e AUDITOR retornaram 3 e 0 auditorias de outro proprietário, respectivamente. Banco real não foi alterado.
