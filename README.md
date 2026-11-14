@@ -180,3 +180,13 @@ Veja o [roteiro de configuração e validação](docs/v16-1-acessos-validacao.md
 - A aplicação não elimina automaticamente registros, fotos ou dados reais em revisões de interface. Testes de ponta a ponta com conta autorizada continuam necessários antes de declarar a produção validada.
 
 As correções foram preparadas e testadas na branch `fix-auditoria-sincronizacao-v16-2`. Consulte `docs/historico-alteracoes.md` para detalhes.
+
+
+## Proteção da auditoria — v16.5 (branch de testes)
+
+- Antes de concluir, o auditor precisa confirmar explicitamente cada uma das sete etapas temáticas, preencher seu nome, data e conclusão. Itens sem avaliação devem ser justificados em Observações; rascunhos antigos continuam disponíveis para revisão.
+- A aplicação tenta gravar imediatamente no IndexedDB quando a página perde visibilidade ou é suspensa. Quando há alterações ou fotografias pendentes, solicita aviso ao sair, dentro das limitações do navegador. Isso **não** substitui o backup.
+- Em **Minha conta**, uma conta aprovada pode exportar um **ZIP com auditorias, revisões locais em conflito e arquivos de fotografias disponíveis** neste dispositivo. Se um arquivo fotográfico estiver ausente, o aviso informa que o backup não é completo. ZIP é confidencial e sem criptografia; guarde-o em lugar seguro. A restauração ainda exige procedimento manual e não deve substituir automaticamente o servidor.
+- A importação automática do Supabase é limitada às auditorias do proprietário autenticado. Administradores podem consultar outros usuários na Central, sem fazer cópias locais indiscriminadas.
+- **Retificação de RLS:** políticas v16.1 verificadas são RESTRICTIVE e restringem o acesso por proprietário ou ADMIN. O diagnóstico que sugeria exposição generalizada foi corrigido e o SQL de remoção cancelado. Nenhuma política do banco de produção foi alterada.
+- O domínio de produção, a câmera de um aparelho real e as credenciais do administrador ainda precisam de teste antes da publicação.
