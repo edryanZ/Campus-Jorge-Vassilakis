@@ -1,10 +1,10 @@
 'use strict';
 
-const CACHE_NAME = 'campus-auditoria-v16-4-2-insights-patrimonio';
+const CACHE_NAME = 'campus-auditoria-v16-5-integridade-coleta';
 const LOCAL_ASSETS = [
   './', './index.html', './styles.css', './app.js', './campus-data.js',
   './audit-data.js', './audit-storage.js', './audit-sync-core.js', './audit-remote.js', './audit-app.js',
-  './campus-insights.js', './patrimonio.js',
+  './campus-insights.js', './patrimonio.js', './audit-validation.js', './audit-backup.js',
   './supabase-config.js', './manifest.webmanifest'
 ];
 const SUPABASE_SDK = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3/dist/umd/supabase.min.js';
