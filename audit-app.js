@@ -1023,6 +1023,7 @@ const AUDIT_APP = (() => {
   const signOutButton = document.getElementById('signOutBtn');
   const syncNowButton = document.getElementById('syncNowBtn');
   const retryAccessButton = document.getElementById('retryAccessBtn');
+  const exportBackupButton = document.getElementById('exportAuditBackupBtn');
   const adminPanel = document.getElementById('adminRequestsPanel');
   const adminList = document.getElementById('accountRequestsList');
   const adminStatus = document.getElementById('accountRequestsStatus');
@@ -1161,6 +1162,7 @@ const AUDIT_APP = (() => {
     showSignupButton.hidden = authenticated || !AUDIT_REMOTE.configured;
     signOutButton.hidden = !authenticated;
     retryAccessButton.hidden = !authenticated;
+    exportBackupButton.hidden = true;
     syncNowButton.hidden = true;
     adminPanel.hidden = true;
     currentAccess = null;
@@ -1180,6 +1182,7 @@ const AUDIT_APP = (() => {
       currentAccess = access;
       window.dispatchEvent(new CustomEvent('audit:access-updated', { detail: { authorized: Boolean(access?.canAudit) } }));
       if (access?.canAudit) {
+        exportBackupButton.hidden = false;
         authStatus.className = 'auth-status is-success';
         authStatus.textContent = message || `Conta autorizada (${access.admin ? 'Administrador' : 'Auditor'})${access.offline ? ' · autorização offline temporária' : ''}.`;
         syncNowButton.hidden = Boolean(access.offline);
