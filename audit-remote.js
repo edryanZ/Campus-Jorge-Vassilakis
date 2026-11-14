@@ -551,14 +551,23 @@ const AUDIT_REMOTE = (() => {
     const user = await sessionUser();
     const access = user ? await getAccess() : null;
     const items = [];
+    const partialFailures = [];
+    let privateCount = 0;
     if (user && access?.canAudit) {
       // RLS já restringe acesso por proprietário/ADMIN; repetir no cliente
       // como defesa em profundidade sem impedir a consulta administrativa.
       let authorizedQuery = client.from('audits')
         .select('id,environment_id,status,updated_at,completed_at,server_revision,owner_id,sync_complete,is_public');
       if (!access.admin) authorizedQuery = authorizedQuery.eq('owner_id', user.id);
-      const owned = await queryWithDeadline(authorizedQuery
-        .order('updated_at', { ascending: false }).limit(1000), 'Consulta de auditorias autorizadas');
+      let owned = { data: [] };
+      try {
+        owned = await queryWithDeadline(authorizedQuery
+          .order('updated_at', { ascending: false }).limit(1000), 'Consulta de auditorias autorizadas');
+      } catch (error) {
+        console.warn('[AuditCenter] Consulta privada parcial:', error);
+        partialFailures.push('auditorias privadas');
+      }
+      privateCount = owned.data?.length || 0;
       for (const row of owned.data || []) {
         items.push({
           auditId: row.id, environmentId: row.environment_id, status: row.status,
@@ -572,7 +581,13 @@ const AUDIT_REMOTE = (() => {
     }
     // Metadados mínimos de ocupação, sem expor o payload privado de outro auditor.
     if (user && access?.canAudit) {
-      const [occupancy, participation] = await Promise.all([listActiveOccupancy(), listMyParticipation()]);
+      const [occupiedTask, participationTask] = await Promise.allSettled([
+        listActiveOccupancy(), listMyParticipation()
+      ]);
+      const occupancy = occupiedTask.status === 'fulfilled' ? occupiedTask.value : [];
+      const participation = participationTask.status === 'fulfilled' ? participationTask.value : [];
+      if (occupiedTask.status === 'rejected') partialFailures.push('ocupação das salas');
+      if (participationTask.status === 'rejected') partialFailures.push('participações');
       const byAudit = new Map(participation.map(item => [item.audit_id, item.status]));
       for (const slot of occupancy) {
         const existing = items.find(item => item.auditId === slot.audit_id);
@@ -589,9 +604,16 @@ const AUDIT_REMOTE = (() => {
         });
       }
     }
-    const published = await queryWithDeadline(client.from('published_audits')
-      .select('id,environment_id,status,updated_at,completed_at,server_revision')
-      .order('updated_at', { ascending: false }).limit(1000), 'Consulta de resultados publicados');
+    let published = { data: [] };
+    try {
+      published = await queryWithDeadline(client.from('published_audits')
+        .select('id,environment_id,status,updated_at,completed_at,server_revision')
+        .order('updated_at', { ascending: false }).limit(1000), 'Consulta de resultados publicados');
+    } catch (error) {
+      if (!items.length) throw error;
+      console.warn('[AuditCenter] Resultados públicos indisponíveis:', error);
+      partialFailures.push('resultados publicados');
+    }
     for (const row of published.data || []) {
       if (items.some(item => item.auditId === row.id)) continue;
       items.push({
@@ -602,7 +624,7 @@ const AUDIT_REMOTE = (() => {
       });
     }
     return { items, authenticated: Boolean(user), offline: false,
-      limited: (published.data?.length || 0) === 1000 || (user && items.length >= 1000) };
+      partialFailures, limited: (published.data?.length || 0) === 1000 || privateCount === 1000 };
   }
 
   // Histórico privado: consulta somente leitura e limitada ao ambiente.
