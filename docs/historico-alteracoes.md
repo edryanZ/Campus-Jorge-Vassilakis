@@ -1,5 +1,16 @@
 # Histórico de alterações
 
+## 2026-11-14 — Varredura final de código e segurança (v16.5.3, somente testes)
+
+- `audit-app.js`: confirmação de auditoria serializada para impedir duplo clique e gravações concorrentes. Reações a respostas remotas verificam identidade/ambiente antes de atualizar a tela. A troca de conta invalida solicitações administrativas antigas e limpa nomes/e-mails da interface.
+- `audit-remote.js`: edição compartilhada confirma que a conta ainda é a mesma depois do RPC, impedindo vincular um registro consultado com identidade anterior à conta atual.
+- `sw.js`: cache v16.5.3, com bloqueio também de recursos estáticos que contenham parâmetros na URL.
+- `tests/varredura-final-v16-5-3.test.cjs`: 9 cenários, incluindo concorrência na conclusão, troca de conta, listas administrativas antigas e RPC compartilhada.
+- Nove documentos de orientação requeridos por `AGENTS.md` foram restabelecidos, sem dados inventados, medições presumidas ou aprovação científica implícita.
+- Testes estruturais e de comportamento simulados: **66 aprovados** nas sete suítes disponíveis. Sem execução real de `node --test`, câmera, login em produção ou Playwright.
+- Não houve alterações nos dados, políticas RLS, branches de produção, deploy ou Actions. A versão publicada continua independente desta branch.
+
+
 ## 2026-11-14 — Limpeza adicional: sincronização parcial, troca de salas e cache seguro
 
 - `audit-remote.js`: depois de enviar auditorias pendentes, falhas de `pullRemote()` não anulam o resultado dos envios. Incluído `recoveryError` distinto e indicação `ALREADY_SYNCING` para evitar mensagem enganosa de falha geral.
