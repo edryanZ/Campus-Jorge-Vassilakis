@@ -105,7 +105,14 @@ const AUDIT_BACKUP = (() => {
       delete result.blob;
       result.hasLocalPhoto = entry.blob instanceof Blob;
       if (result.hasLocalPhoto) {
-        const fileName = 'fotografias/' + safe(entry.auditId) + '/' + safe(entry.evidenceId) + '.bin';
+        // Extensão coerente com o formato real para abrir a imagem fora do app.
+        const imageExtensions = {
+          'image/jpeg': '.jpg', 'image/png': '.png',
+          'image/webp': '.webp', 'image/heic': '.heic', 'image/heif': '.heif'
+        };
+        const extension = imageExtensions[entry.mimeType || entry.blob.type] || '.bin';
+        const fileName = 'fotografias/' + safe(entry.auditId) + '/' +
+          safe(entry.evidenceId) + extension;
         result.archivePath = fileName;
         files.push({ name: fileName, blob: entry.blob });
       }
