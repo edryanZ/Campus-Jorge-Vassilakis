@@ -66,7 +66,7 @@ const AUDIT_APP = (() => {
       await closeModal();
       if (!modal.hidden) return;
     }
-    ++historyRequestId; // Uma consulta antiga ao histórico não pode alterar o formulário.
+    const requestId = ++historyRequestId; // Invalida todas as seleções anteriores, inclusive A→B→A.
     environment = target;
     audit = null;
     editorUserId = null;
@@ -78,10 +78,13 @@ const AUDIT_APP = (() => {
     try {
       const access = currentAccess?.canAudit ? currentAccess : await AUDIT_REMOTE.getAccess();
       // Consultas iniciadas para outra sala ou tela não podem atualizar este modal.
-      if (modal.hidden || environment?.environmentId !== target.environmentId ||
+      if (requestId !== historyRequestId || modal.hidden ||
+          environment?.environmentId !== target.environmentId ||
           title.textContent !== 'Abrindo auditoria') return;
       if (!access?.canAudit) {
         const signedInUser = await AUDIT_REMOTE.sessionUser();
+        if (requestId !== historyRequestId || modal.hidden ||
+            environment?.environmentId !== target.environmentId) return;
         modal.hidden = true;
         openAuthModal();
         authStatus.className = 'auth-status is-error';
@@ -95,20 +98,28 @@ const AUDIT_APP = (() => {
         return;
       }
       const owner = await AUDIT_REMOTE.ownerKey();
-      if (modal.hidden || environment?.environmentId !== target.environmentId ||
+      if (requestId !== historyRequestId || modal.hidden ||
+          environment?.environmentId !== target.environmentId ||
           title.textContent !== 'Abrindo auditoria') return;
       const key = `${owner}::${target.environmentId}`;
-      if (openLocks.has(key)) return openLocks.get(key);
+      if (openLocks.has(key)) {
+        // Uma abertura anterior da mesma sala pode ter sido cancelada ao trocar
+        // de tela. Aguardar seu fim e iniciar uma abertura válida desta seleção.
+        await openLocks.get(key);
+        if (requestId !== historyRequestId || modal.hidden || audit) return;
+      }
       content.innerHTML = '<div class="audit-empty"><h3>Abrindo a sala…</h3><p>Conferindo seu rascunho. Se esta for uma nova auditoria, será necessário verificar a ocupação no servidor.</p></div>';
-      const task = openAuditLocked(target, owner, access).then(() => {
-        if (!audit && !modal.hidden && environment?.environmentId === target.environmentId &&
+      const task = openAuditLocked(target, owner, access, requestId).then(() => {
+        if (requestId === historyRequestId && !audit && !modal.hidden &&
+            environment?.environmentId === target.environmentId &&
             title.textContent === 'Abrindo auditoria') {
           content.innerHTML = '<div class="audit-empty"><h3>Não foi possível abrir a auditoria</h3><p>Nenhum registro foi alterado. Verifique os avisos e tente novamente.</p><button type="button" data-audit-retry>Tentar novamente</button></div>';
           content.querySelector('[data-audit-retry]')?.addEventListener('click', () => openAudit(mapId));
         }
       }).catch(error => {
         console.error('[AuditOpen] Falha:', error);
-        if (!modal.hidden && environment?.environmentId === target.environmentId &&
+        if (requestId === historyRequestId && !modal.hidden &&
+            environment?.environmentId === target.environmentId &&
             title.textContent === 'Abrindo auditoria') {
           content.innerHTML = `<div class="audit-empty"><h3>Falha ao abrir a auditoria</h3><p>${escapeHtml(error.message || error)}</p><p>Seus registros locais não foram apagados.</p><button type="button" data-audit-retry>Tentar novamente</button></div>`;
           content.querySelector('[data-audit-retry]')?.addEventListener('click', () => openAudit(mapId));
@@ -118,7 +129,8 @@ const AUDIT_APP = (() => {
       return task;
     } catch (error) {
       console.error('[AuditAccess] Falha de autorização:', error);
-      if (modal.hidden || environment?.environmentId !== target.environmentId ||
+      if (requestId !== historyRequestId || modal.hidden ||
+          environment?.environmentId !== target.environmentId ||
           title.textContent !== 'Abrindo auditoria') return;
       content.innerHTML = `<div class="audit-empty"><h3>Falha ao verificar autorização</h3><p>${escapeHtml(error.message || error)}</p><p>O servidor pode estar lento. Nada foi apagado.</p><button type="button" data-access-retry>Tentar novamente</button></div>`;
       content.querySelector('[data-access-retry]')?.addEventListener('click', () => openAudit(mapId));
@@ -161,10 +173,10 @@ const AUDIT_APP = (() => {
     saveState.textContent = 'Participação autorizada · dados compartilhados · edição online';
   }
 
-  async function openAuditLocked(target, owner, access) {
+  async function openAuditLocked(target, owner, access, requestId) {
     // A pessoa pode selecionar outra sala enquanto o Supabase responde.
     // Não recuperar, assumir ou abrir um formulário de uma seleção antiga.
-    const isCurrent = () => !modal.hidden &&
+    const isCurrent = () => requestId === historyRequestId && !modal.hidden &&
       environment?.environmentId === target.environmentId &&
       title.textContent === 'Abrindo auditoria';
     if (!isCurrent()) return;
