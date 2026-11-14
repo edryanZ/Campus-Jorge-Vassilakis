@@ -747,12 +747,24 @@ const AUDIT_APP = (() => {
     const form = content.querySelector('#auditForm');
     if (!form) return;
     const stepId = AUDIT_DATA.STEPS[stepIndex].id;
+    const previous = audit.data[stepId] || {};
     const values = Object.fromEntries(new FormData(form).entries());
-    audit.data[stepId] = { ...(audit.data[stepId] || {}), ...values };
+    const next = { ...previous, ...values };
     const reviewCheckbox = form.querySelector('[data-review-confirm]');
+    const reviewed = reviewCheckbox?.checked === true;
+    const wasReviewed = audit.reviewedSteps?.[stepId] === true;
+    // Eventos input/change e fechamento não precisam criar nova mutação
+    // quando o conteúdo permanece igual. Isso reduz escritas IndexedDB e
+    // requisições Supabase em aparelhos com pouca memória.
+    if (JSON.stringify(previous) === JSON.stringify(next) &&
+        (!reviewCheckbox || reviewed === wasReviewed)) {
+      toggleConditionalFields();
+      return;
+    }
+    audit.data[stepId] = next;
     if (reviewCheckbox) {
       audit.reviewedSteps ||= {};
-      audit.reviewedSteps[stepId] = reviewCheckbox.checked;
+      audit.reviewedSteps[stepId] = reviewed;
     }
     markDirty();
     toggleConditionalFields();
@@ -776,8 +788,12 @@ const AUDIT_APP = (() => {
 
   function navigate(delta) {
     captureForm();
-    stepIndex = Math.max(0, Math.min(AUDIT_DATA.STEPS.length - 1, stepIndex + delta));
-    audit.currentStep = stepIndex;
+    const nextStep = Math.max(0, Math.min(AUDIT_DATA.STEPS.length - 1, stepIndex + delta));
+    if (nextStep === stepIndex) return;
+    stepIndex = nextStep;
+    audit.currentStep = nextStep;
+    // A etapa também deve ser salva mesmo quando nenhuma resposta foi alterada.
+    if (!isDirty) markDirty();
     scheduleSave(true);
     renderStep();
   }
