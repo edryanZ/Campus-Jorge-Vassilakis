@@ -1130,6 +1130,7 @@ const AUDIT_APP = (() => {
     adminPanel.hidden = true;
     currentAccess = null;
     if (!authenticated) {
+      window.dispatchEvent(new CustomEvent('audit:access-updated', { detail: { authorized: false } }));
       authStatus.className = AUDIT_REMOTE.configured ? 'auth-status' : 'auth-status is-error';
       authStatus.textContent = message || (AUDIT_REMOTE.configured
         ? 'Consulte resultados publicados sem login ou entre com uma conta autorizada para auditar.'
@@ -1142,6 +1143,7 @@ const AUDIT_APP = (() => {
       const access = await AUDIT_REMOTE.getAccess({ forceRefresh });
       if (generation !== authGeneration) return;
       currentAccess = access;
+      window.dispatchEvent(new CustomEvent('audit:access-updated', { detail: { authorized: Boolean(access?.canAudit) } }));
       if (access?.canAudit) {
         authStatus.className = 'auth-status is-success';
         authStatus.textContent = message || `Conta autorizada (${access.admin ? 'Administrador' : 'Auditor'})${access.offline ? ' · autorização offline temporária' : ''}.`;
@@ -1161,6 +1163,7 @@ const AUDIT_APP = (() => {
       }
     } catch (error) {
       if (generation !== authGeneration) return;
+      window.dispatchEvent(new CustomEvent('audit:access-updated', { detail: { authorized: false } }));
       authStatus.className = 'auth-status is-error';
       authStatus.textContent = `Falha ao verificar autorização: ${error.message || error}`;
     }
