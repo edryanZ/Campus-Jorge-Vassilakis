@@ -77,6 +77,9 @@ const AUDIT_APP = (() => {
     saveState.textContent = 'Nenhum dado foi alterado nesta etapa.';
     try {
       const access = currentAccess?.canAudit ? currentAccess : await AUDIT_REMOTE.getAccess();
+      // Consultas iniciadas para outra sala ou tela não podem atualizar este modal.
+      if (modal.hidden || environment?.environmentId !== target.environmentId ||
+          title.textContent !== 'Abrindo auditoria') return;
       if (!access?.canAudit) {
         const signedInUser = await AUDIT_REMOTE.sessionUser();
         modal.hidden = true;
@@ -92,17 +95,21 @@ const AUDIT_APP = (() => {
         return;
       }
       const owner = await AUDIT_REMOTE.ownerKey();
+      if (modal.hidden || environment?.environmentId !== target.environmentId ||
+          title.textContent !== 'Abrindo auditoria') return;
       const key = `${owner}::${target.environmentId}`;
       if (openLocks.has(key)) return openLocks.get(key);
       content.innerHTML = '<div class="audit-empty"><h3>Abrindo a sala…</h3><p>Conferindo seu rascunho. Se esta for uma nova auditoria, será necessário verificar a ocupação no servidor.</p></div>';
       const task = openAuditLocked(target, owner, access).then(() => {
-        if (!audit && !modal.hidden && title.textContent === 'Abrindo auditoria') {
+        if (!audit && !modal.hidden && environment?.environmentId === target.environmentId &&
+            title.textContent === 'Abrindo auditoria') {
           content.innerHTML = '<div class="audit-empty"><h3>Não foi possível abrir a auditoria</h3><p>Nenhum registro foi alterado. Verifique os avisos e tente novamente.</p><button type="button" data-audit-retry>Tentar novamente</button></div>';
           content.querySelector('[data-audit-retry]')?.addEventListener('click', () => openAudit(mapId));
         }
       }).catch(error => {
         console.error('[AuditOpen] Falha:', error);
-        if (!modal.hidden) {
+        if (!modal.hidden && environment?.environmentId === target.environmentId &&
+            title.textContent === 'Abrindo auditoria') {
           content.innerHTML = `<div class="audit-empty"><h3>Falha ao abrir a auditoria</h3><p>${escapeHtml(error.message || error)}</p><p>Seus registros locais não foram apagados.</p><button type="button" data-audit-retry>Tentar novamente</button></div>`;
           content.querySelector('[data-audit-retry]')?.addEventListener('click', () => openAudit(mapId));
         }
@@ -111,6 +118,8 @@ const AUDIT_APP = (() => {
       return task;
     } catch (error) {
       console.error('[AuditAccess] Falha de autorização:', error);
+      if (modal.hidden || environment?.environmentId !== target.environmentId ||
+          title.textContent !== 'Abrindo auditoria') return;
       content.innerHTML = `<div class="audit-empty"><h3>Falha ao verificar autorização</h3><p>${escapeHtml(error.message || error)}</p><p>O servidor pode estar lento. Nada foi apagado.</p><button type="button" data-access-retry>Tentar novamente</button></div>`;
       content.querySelector('[data-access-retry]')?.addEventListener('click', () => openAudit(mapId));
     }
@@ -153,8 +162,14 @@ const AUDIT_APP = (() => {
   }
 
   async function openAuditLocked(target, owner, access) {
-    environment = target;
-    let local = await AUDIT_STORAGE.findActive(environment.environmentId, owner);
+    // A pessoa pode selecionar outra sala enquanto o Supabase responde.
+    // Não recuperar, assumir ou abrir um formulário de uma seleção antiga.
+    const isCurrent = () => !modal.hidden &&
+      environment?.environmentId === target.environmentId &&
+      title.textContent === 'Abrindo auditoria';
+    if (!isCurrent()) return;
+    let local = await AUDIT_STORAGE.findActive(target.environmentId, owner);
+    if (!isCurrent()) return;
     if (local?.collaborationEditorId && local.collaborationEditorId !== owner) {
       if (['LOCAL_ONLY','PENDING','ERROR','CONFLICT'].includes(local.syncState)) {
         window.alert('Existe uma edição compartilhada pendente neste dispositivo. O rascunho foi preservado e não será assumido por outra conta.');
@@ -163,7 +178,10 @@ const AUDIT_APP = (() => {
       local = null; // O proprietário buscará seu próprio registro remoto atualizado.
     }
     if (!local && !owner.startsWith('LOCAL:')) {
-      local = await AUDIT_STORAGE.findActive(environment.environmentId, `LOCAL:${await AUDIT_STORAGE.getDeviceId()}`);
+      const deviceKey = `LOCAL:${await AUDIT_STORAGE.getDeviceId()}`;
+      if (!isCurrent()) return;
+      local = await AUDIT_STORAGE.findActive(target.environmentId, deviceKey);
+      if (!isCurrent()) return;
     }
     // Já existe auditoria desta conta neste aparelho: abrir em seguida,
     // sem obrigar o usuário a esperar uma sequência de requisições remotas.
@@ -179,7 +197,8 @@ const AUDIT_APP = (() => {
       ? AUDIT_REMOTE.listActiveOccupancy().then(value => ({ value }), error => ({ error }))
       : null;
     if (canCheckRemote) {
-      ownedRemote = await AUDIT_REMOTE.findRemoteActive(environment.environmentId);
+      ownedRemote = await AUDIT_REMOTE.findRemoteActive(target.environmentId);
+      if (!isCurrent()) return;
       if (ownedRemote && local && ownedRemote.auditId !== local.auditId) {
         await AUDIT_REMOTE.preserveConflict(local, ownedRemote, 'ACTIVE_IDENTITY');
         window.alert('Existe um rascunho remoto diferente para esta sala. O conflito foi preservado e nenhuma cópia será sobrescrita.');
@@ -194,15 +213,17 @@ const AUDIT_APP = (() => {
       // conta nunca pode ser assumida ou sincronizada automaticamente.
       // Não oferecer criação local quando há auditoria ativa de outro usuário.
       const checked = await occupancyTask;
+      if (!isCurrent()) return;
       if (checked.error) {
         window.alert('Não foi possível verificar se já existe uma auditoria ativa nesta sala. Por segurança, tente novamente quando a consulta estiver disponível.');
         return;
       }
       const occupancy = checked.value;
-      const occupied = occupancy.find(item => item.environment_id === environment.environmentId);
+      const occupied = occupancy.find(item => item.environment_id === target.environmentId);
       if (occupied && ownedRemote?.auditId !== occupied.audit_id &&
           !(local?.auditId === occupied.audit_id && local.ownerId === owner)) {
         const requests = await AUDIT_REMOTE.listMyParticipation();
+        if (!isCurrent()) return;
         const status = requests.find(item => item.audit_id === occupied.audit_id)?.status;
         if (status === 'APPROVED') return openSharedAudit(occupied.audit_id);
         if (status === 'PENDING') {
@@ -219,6 +240,7 @@ const AUDIT_APP = (() => {
         return;
       }
     }
+    if (!isCurrent()) return;
     if (local && !local.ownerId && !owner.startsWith('LOCAL:')) {
       const accepted = window.confirm(
         'Existe uma auditoria antiga neste dispositivo sem conta vinculada. Deseja assumir este rascunho na sua conta? ' +
@@ -239,6 +261,7 @@ const AUDIT_APP = (() => {
         try {
           const result = await AUDIT_REMOTE.resumeOrCreateActive(proposed);
           local = result.audit;
+          if (!isCurrent()) return;
         } catch (error) {
           // Sem confirmação remota, não criar um novo rascunho ativo:
           // outro auditor pode ter ocupado a sala entre a consulta e o RPC.
@@ -254,6 +277,7 @@ const AUDIT_APP = (() => {
         local = await AUDIT_STORAGE.getAudit(error.existingAuditId);
       }
     }
+    if (!isCurrent()) return;
     return showActiveDraft(local, owner, access);
   }
 
