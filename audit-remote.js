@@ -664,7 +664,8 @@ const AUDIT_REMOTE = (() => {
 
   async function syncPending() {
     const access = await getAccess();
-    if (syncing || !client || !navigator.onLine || !access?.canAudit || access.offline)
+    if (syncing) return { skipped: true, reason: 'ALREADY_SYNCING' };
+    if (!client || !navigator.onLine || !access?.canAudit || access.offline)
       return { skipped: true, reason: access?.offline ? 'SERVER_UNAVAILABLE' : 'UNAUTHORIZED' };
     syncing = true;
     let synced = 0; let failed = 0; let pendingEvidence = 0;
@@ -687,8 +688,16 @@ const AUDIT_REMOTE = (() => {
           else if (!result?.skipped) { failed += 1; pendingEvidence += result?.evidence?.pending || result?.evidence?.errors || 0; }
         } catch (error) { failed += 1; console.error('[AuditRemote]', error); }
       }
-      await pullRemote();
-      return { synced, failed, pendingEvidence };
+      // O envio pode ter sido confirmado mesmo se o download de recuperação
+      // falhar. Uma falha no pull não pode apagar a contagem de sucessos
+      // nem fazer a interface informar que a sincronização inteira falhou.
+      let recoveryError = null;
+      try { await pullRemote(); }
+      catch (error) {
+        recoveryError = error?.message || String(error);
+        console.warn('[AuditRemote] Envios processados; recuperação remota não concluída:', error);
+      }
+      return { synced, failed, pendingEvidence, recoveryError };
     } finally {
       syncing = false;
       dispatch('audit:sync-end', { synced, failed, pendingEvidence });
