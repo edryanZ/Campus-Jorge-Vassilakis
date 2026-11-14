@@ -16,17 +16,18 @@ test('troca de sala descarta abertura antiga antes de modificar o editor', async
   let finish;
   const pending = new Promise(resolve => { finish = resolve; });
   const factory = new Function('modal', 'title', 'AUDIT_STORAGE',
-    'let environment = { environmentId: "SALA-A" };\n' +
+    'let environment = { environmentId: "SALA-A" }; let historyRequestId = 1;\n' +
     extract(read('audit-app.js'),
       '  async function openAuditLocked(target, owner, access) {',
       '  async function showActiveDraft(') +
-    '\nreturn { openAuditLocked, switchTo(id) { environment = { environmentId:id }; } };');
+    '\nreturn { openAuditLocked, switchTo(id) { environment = { environmentId:id }; historyRequestId += 1; } };');
   let lookups = 0;
   const editor = factory({ hidden:false }, {textContent:'Abrindo auditoria'}, {
     findActive() { lookups++; return pending; }
   });
-  const operation = editor.openAuditLocked({environmentId:'SALA-A'}, 'USER-A', {});
+  const operation = editor.openAuditLocked({environmentId:'SALA-A'}, 'USER-A', {}, 1);
   editor.switchTo('SALA-B');
+  editor.switchTo('SALA-A'); // Retorno rápido para a primeira sala não reativa a consulta antiga.
   finish(null);
   await operation;
   assert.equal(lookups, 1);
