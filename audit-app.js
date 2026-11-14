@@ -1108,10 +1108,13 @@ const AUDIT_APP = (() => {
   let authGeneration = 0;
 
   async function loadAccessRequests() {
+    if (!currentAccess?.admin || currentAccess.offline) return;
+    const generation = authGeneration;
     adminStatus.textContent = 'Consultando solicitações…';
     adminList.replaceChildren();
     try {
       const rows = await AUDIT_REMOTE.listAccessRequests();
+      if (generation !== authGeneration || !currentAccess?.admin || adminPanel.hidden) return;
       adminStatus.textContent = rows.length ? `${rows.length} conta(s) encontrada(s)` : 'Nenhuma solicitação até agora.';
       for (const item of rows) {
         const card = document.createElement('article');
@@ -1147,6 +1150,7 @@ const AUDIT_APP = (() => {
         adminList.append(card);
       }
     } catch (error) {
+      if (generation !== authGeneration || !currentAccess?.admin) return;
       adminStatus.textContent = `Não foi possível carregar solicitações: ${error.message || error}`;
     }
   }
@@ -1165,10 +1169,13 @@ const AUDIT_APP = (() => {
   }
 
   async function loadAuditParticipationRequests() {
+    if (!currentAccess?.admin || currentAccess.offline) return;
+    const generation = authGeneration;
     participationStatus.textContent = 'Consultando solicitações de participação…';
     participationList.replaceChildren();
     try {
       const rows = await AUDIT_REMOTE.listAuditParticipationRequests();
+      if (generation !== authGeneration || !currentAccess?.admin || adminPanel.hidden) return;
       participationStatus.textContent = rows.length
         ? `${rows.length} solicitação(ões) de participação.`
         : 'Nenhuma solicitação de participação.';
@@ -1206,6 +1213,7 @@ const AUDIT_APP = (() => {
         participationList.append(card);
       }
     } catch (error) {
+      if (generation !== authGeneration || !currentAccess?.admin) return;
       participationStatus.textContent = 'Falha ao consultar participações: ' + (error.message || error);
     }
   }
@@ -1239,6 +1247,12 @@ const AUDIT_APP = (() => {
     syncNowButton.hidden = true;
     adminPanel.hidden = true;
     currentAccess = null;
+    // Não manter nomes/e-mails de outras contas visíveis após sair ou trocar
+    // de perfil, mesmo que uma consulta antiga termine mais tarde.
+    adminList.replaceChildren();
+    participationList.replaceChildren();
+    adminStatus.textContent = '';
+    participationStatus.textContent = '';
     if (!authenticated) {
       window.dispatchEvent(new CustomEvent('audit:access-updated', { detail: { authorized: false } }));
       authStatus.className = AUDIT_REMOTE.configured ? 'auth-status' : 'auth-status is-error';
@@ -1690,6 +1704,11 @@ const AUDIT_APP = (() => {
     if (_event === 'TOKEN_REFRESHED' && nextUserId === currentSessionUserId &&
         currentAccess?.canAudit) return; // Não recarregar UI e listas a cada token.
     if (currentSessionUserId && currentSessionUserId !== nextUserId) {
+      ++authGeneration; // Invalida requisições administrativas ainda pendentes.
+      currentAccess = null;
+      adminPanel.hidden = true;
+      adminList.replaceChildren();
+      participationList.replaceChildren();
       clearTimeout(centerSearchTimer);
       ++centerRequestId;
       centerRecords = [];
