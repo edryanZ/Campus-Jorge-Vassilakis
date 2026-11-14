@@ -17,12 +17,20 @@ const AUDIT_VALIDATION = (() => {
     if (typeof value === 'object') return Object.values(value).some(meaningful);
     return String(value).trim().length > 0;
   }
+  function validLocalDate(value) {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ''));
+    if (!match) return false;
+    const year = Number(match[1]), month = Number(match[2]), day = Number(match[3]);
+    const date = new Date(Date.UTC(year, month - 1, day));
+    return date.getUTCFullYear() === year && date.getUTCMonth() + 1 === month &&
+      date.getUTCDate() === day;
+  }
   function review(record) {
     const data = record?.data || {};
     const errors = [];
     if (!String(data.identification?.inspector || '').trim())
       errors.push({ step: 'identification', message: 'Informe o(a) auditor(a) responsável.' });
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(data.identification?.date || '')))
+    if (!validLocalDate(data.identification?.date))
       errors.push({ step: 'identification', message: 'Informe uma data válida para a coleta.' });
     for (const step of requiredSteps) {
       if (record?.reviewedSteps?.[step] !== true) {
