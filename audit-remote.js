@@ -32,12 +32,6 @@ const AUDIT_REMOTE = (() => {
   const newId = prefix => `${prefix}-${crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`}`;
   const dispatch = (name, detail = {}) => window.dispatchEvent(new CustomEvent(name, { detail }));
 
-  async function currentUser() {
-    if (!client) return null;
-    const { data, error } = await client.auth.getUser();
-    return error ? null : data.user || null;
-  }
-
   async function sessionUser() {
     if (!client) return null;
     const { data, error } = await client.auth.getSession();
@@ -744,7 +738,7 @@ const AUDIT_REMOTE = (() => {
 
   window.addEventListener('online', () => syncPending().catch(error => console.error('[AuditRemote]', error)));
   return Object.freeze({
-    configured, client, currentUser, sessionUser, ownerKey, signIn, signOut, requestAccount, getAccess, approveLegacyAdoption, listAccessRequests, reviewAccessRequest, setPublication, getPublishedAudit, onAuthStateChange,
+    configured, client, sessionUser, ownerKey, signIn, signOut, requestAccount, getAccess, approveLegacyAdoption, listAccessRequests, reviewAccessRequest, setPublication, getPublishedAudit, onAuthStateChange,
     findRemoteActive, listActiveOccupancy, requestAuditParticipation, listMyParticipation, listAuditParticipationRequests, reviewAuditParticipation, getSharedAudit, resumeOrCreateActive, syncAudit, scheduleSync, flushSync, syncPending,
     pullRemote, listPublic, listAccessibleAudits, listPrivateHistory, getPrivateHistoryRecord, preserveConflict
   });
