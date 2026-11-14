@@ -17,6 +17,7 @@ const AUDIT_APP = (() => {
   let localSaveQueue = Promise.resolve();
   let savingWrites = 0;
   let evidenceWriteActive = false;
+  let completionInFlight = false;
   let evidenceSaveFinished = Promise.resolve();
   const openLocks = new Map();
 
@@ -987,6 +988,15 @@ const AUDIT_APP = (() => {
   }
 
   async function completeAudit() {
+    if (completionInFlight || !audit || audit.status === AUDIT_DATA.STATUS.COMPLETED) return;
+    completionInFlight = true;
+    const completeButton = content.querySelector('[data-complete]');
+    if (completeButton) completeButton.disabled = true;
+    const completingRecord = audit;
+    const completingEnvironment = environment?.environmentId;
+    const isCurrentCompletion = () => audit === completingRecord && !modal.hidden &&
+      environment?.environmentId === completingEnvironment;
+    try {
     // Não permitir conclusão com seções sem revisão explícita.
     await evidenceSaveFinished;
     captureForm();
@@ -1024,7 +1034,8 @@ const AUDIT_APP = (() => {
     let remoteMessage = 'O registro permanece neste dispositivo até que a sincronização seja confirmada.';
     if (AUDIT_REMOTE.configured && navigator.onLine) {
       try {
-        const result = await AUDIT_REMOTE.syncAudit(audit);
+        const result = await AUDIT_REMOTE.syncAudit(completingRecord);
+        if (!isCurrentCompletion()) return;
         if (result.synced) {
           audit = result.audit;
           saveState.textContent = '✓ Auditoria concluída e sincronizada com o Supabase';
@@ -1035,13 +1046,18 @@ const AUDIT_APP = (() => {
           remoteMessage = 'Os dados foram preservados, mas a auditoria não está completamente sincronizada enquanto houver evidências pendentes.';
         }
       } catch (error) {
+        if (!isCurrentCompletion()) return;
         saveState.textContent = `⚠ Concluída e salva localmente · erro de sincronização: ${error.message || 'tente novamente'}`;
       }
     }
+    if (!isCurrentCompletion()) return;
     content.innerHTML = `<div class="audit-empty"><h3>Auditoria concluída</h3><p>O registro não substitui auditorias anteriores. ${escapeHtml(remoteMessage)}</p><button class="audit-primary" type="button" data-done>Fechar</button></div>`;
     content.querySelector('[data-done]').addEventListener('click', closeModal);
+    } finally {
+      completionInFlight = false;
+      if (completeButton?.isConnected) completeButton.disabled = false;
+    }
   }
-
   function statusLabel(status) { return ({ DRAFT: 'Rascunho', IN_PROGRESS: 'Em andamento', COMPLETED: 'Concluída' })[status] || status; }
 
   function syncLabel(state) {
