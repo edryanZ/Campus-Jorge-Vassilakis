@@ -272,22 +272,11 @@ const AUDIT_STORAGE = (() => {
     return value;
   }
 
-  async function exportAll() {
-    const [audits, evidence, conflicts] = await Promise.all([listAudits(), listEvidence(), listConflicts()]);
-    return {
-      schemaVersion: 3,
-      exportedAt: new Date().toISOString(),
-      warning: 'Backup contém dados potencialmente sensíveis. Proteja o arquivo exportado. Os bytes das imagens continuam separados.',
-      audits, conflicts,
-      evidence: evidence.map(item => ({ ...item, blob: undefined, blobIncluded: Boolean(item.blob) }))
-    };
-  }
-
   return Object.freeze({
     openDatabase, saveAudit, saveRemoteAcknowledgment, saveRemoteIfClean, getAudit, listAudits, listByEnvironment, findActive, listRecoveries,
     saveEvidence, getEvidence, listEvidence, listEvidenceByAudit, listPending,
     saveConflict, getConflict, listConflicts, evidenceManifest,
-    getDeviceId, exportAll, evidenceSummary
+    getDeviceId, evidenceSummary
   });
 })();
 
