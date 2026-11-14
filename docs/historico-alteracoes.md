@@ -5,6 +5,8 @@
 - Novo módulo de indicadores lê resumos de iluminação e instalações hidráulicas já coletados no dispositivo, somente após autorização da conta, sem criar classificações ambientais ou consumo fictício.
 - Cadastro auxiliar de tombos: descrição, etiqueta, ambiente confirmado, estado e observações; IndexedDB independente e vinculado à conta, com prevenção de duplicatas na mesma conta e dispositivo.
 - Identificação explícita de que não se trata de inventário oficial, não há sincronização de tombos e os indicadores não são consolidados.
+- Inventário pode ser filtrado por sala e exportado em CSV; nenhum tombo real foi pré-cadastrado.
+- Encontradas políticas de RLS amplas no banco: frontend passou a filtrar consultas privadas pelo dono quando a conta não é ADMIN. Proposta de correção no servidor documentada em docs/seguranca; não aplicada ao banco real.
 - Cache do aplicativo atualizado para v16.4 com os novos arquivos; visual mobile adaptado.
 - Dados reais, Supabase e main preservados; validação end-to-end segue necessária.
 
