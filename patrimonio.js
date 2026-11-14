@@ -109,8 +109,11 @@ const CAMPUS_PATRIMONY = (() => {
       if (request !== generation) return;
       form.hidden = false;
       countLabel.textContent = records.length ? records.length + ' bem(ns) neste dispositivo' : 'Cadastrar tombos';
-      status.textContent = records.length + ' registro(s) auxiliares nesta conta e neste dispositivo.';
-      for (const item of records.sort((a,b) => b.createdAt.localeCompare(a.createdAt))) listing.append(render(item));
+      const visible = records.filter(item => !envPicker.value || item.environmentId === envPicker.value);
+      status.textContent = visible.length + ' de ' + records.length +
+        ' registro(s) desta conta e dispositivo.' +
+        (envPicker.value ? ' Filtro: ambiente selecionado.' : ' Todos os ambientes.');
+      for (const item of visible.sort((a,b) => b.createdAt.localeCompare(a.createdAt))) listing.append(render(item));
     } catch (error) {
       if (request !== generation) return;
       form.hidden = true;
@@ -134,6 +137,33 @@ const CAMPUS_PATRIMONY = (() => {
   window.addEventListener('campus:patrimony-open', event => open(event.detail?.mapId));
   modal.querySelectorAll('[data-asset-close]').forEach(element => element.addEventListener('click', close));
   document.getElementById('assetRefreshBtn').addEventListener('click', refresh);
+  envPicker.addEventListener('change', refresh);
+  document.getElementById('assetExportBtn').addEventListener('click', async () => {
+    try {
+      const user = await authorized();
+      const records = await listFor(user.id);
+      if (!records.length) {
+        status.textContent = 'Nenhum registro deste dispositivo para exportar.';
+        return;
+      }
+      const columns = ['tombo','description','environmentId','condition','notes','createdAt'];
+      // Protege contra fórmula em CSV quando o arquivo for aberto em planilhas.
+      const csvCell = value => {
+        let cell = String(value ?? '');
+        if (/^[\s]*[=+\-@]/.test(cell)) cell = "'" + cell;
+        return '"' + cell.replace(/"/g, '""') + '"';
+      };
+      const csv = '\uFEFF' + [columns.join(';'), ...records.map(record =>
+        columns.map(col => csvCell(record[col])).join(';'))].join('\r\n');
+      const url = URL.createObjectURL(new Blob([csv], { type:'text/csv;charset=utf-8' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'inventario-auxiliar-campus-' + new Date().toISOString().slice(0,10) + '.csv';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      status.textContent = 'Exportado para conferência. Não é inventário oficial da UNIR.';
+    } catch (error) { status.textContent = 'Falha ao exportar: ' + (error.message || error); }
+  });
   document.addEventListener('keydown', event => { if (event.key === 'Escape' && !modal.hidden) close(); });
   form.addEventListener('submit', async event => {
     event.preventDefault();
