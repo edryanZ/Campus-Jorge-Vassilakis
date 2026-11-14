@@ -1,6 +1,6 @@
 'use strict';
 
-const CACHE_NAME = 'campus-auditoria-v16-5-1-refino';
+const CACHE_NAME = 'campus-auditoria-v16-5-2-seguranca-cache';
 const APP_CACHE_PREFIX = 'campus-auditoria-';
 const LOCAL_ASSETS = [
   './', './index.html', './styles.css', './app.js', './campus-data.js',
@@ -35,7 +35,10 @@ self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
   const isLocal = url.origin === self.location.origin;
   const isPinnedSdk = event.request.url === SUPABASE_SDK;
-  const isPageNavigation = isLocal && event.request.mode === 'navigate';
+  // Somente a entrada estática do app é atendida offline. Não interceptar
+  // rotas de outros serviços da mesma origem (ex.: respostas de API).
+  const isPageNavigation = isLocal && event.request.mode === 'navigate' &&
+    CACHED_PATHS.has(url.pathname);
   const isLocalAsset = isLocal && CACHED_PATHS.has(url.pathname);
   if (!isPageNavigation && !isLocalAsset && !isPinnedSdk) return;
 
@@ -43,7 +46,9 @@ self.addEventListener('fetch', event => {
     event.respondWith((async () => {
       try {
         const response = await fetch(event.request);
-        if (response.ok) {
+        // URLs de login podem carregar ?code=, ?token= ou outros dados:
+        // nunca persistir variantes com parâmetros de autenticação.
+        if (response.ok && !url.search) {
           try {
             const cache = await caches.open(CACHE_NAME);
             await cache.put(event.request, response.clone());
