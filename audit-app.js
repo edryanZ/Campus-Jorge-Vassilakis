@@ -1521,6 +1521,8 @@ const AUDIT_APP = (() => {
             ? 'Inclui registros autorizados do Supabase e resultados públicos.'
             : 'Consulta livre: somente auditorias publicadas.';
           if (remote.limited) centerLoadNote += ' Consulta limitada aos 1.000 registros mais recentes por origem.';
+          if (remote.partialFailures?.length) centerLoadNote +=
+            ' Atenção: consulta parcial — ' + remote.partialFailures.join(', ') + '. Tente atualizar.';
           refresh();
         }).catch(error => {
           if (!isCurrent()) return;
