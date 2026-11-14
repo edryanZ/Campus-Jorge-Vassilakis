@@ -18,7 +18,7 @@ test('troca de sala descarta abertura antiga antes de modificar o editor', async
   const factory = new Function('modal', 'title', 'AUDIT_STORAGE',
     'let environment = { environmentId: "SALA-A" }; let historyRequestId = 1;\n' +
     extract(read('audit-app.js'),
-      '  async function openAuditLocked(target, owner, access) {',
+      '  async function openAuditLocked(target, owner, access, requestId) {',
       '  async function showActiveDraft(') +
     '\nreturn { openAuditLocked, switchTo(id) { environment = { environmentId:id }; historyRequestId += 1; } };');
   let lookups = 0;
