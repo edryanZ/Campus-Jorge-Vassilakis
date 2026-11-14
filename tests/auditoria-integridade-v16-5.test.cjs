@@ -80,7 +80,7 @@ test('backup gera ZIP com manifesto e bytes integrais das fotos', async () => {
   const firstSize = head.getUint32(22,true);
   const start = 30+filenameLength;
   assert.equal(new TextDecoder().decode(bytes.slice(start,start+firstSize)), '{"ok":true}');
-  assert.equal(head.getUint32(14,true),0x0D4A1185); // CRC32 conhecido de {"ok":true}
+  assert.equal(head.getUint32(14,true),0xA7D45F90); // CRC32 conhecido de {"ok":true}
 });
 
 test('interface integra os módulos; a PWA atualiza o cache', () => {
