@@ -1,5 +1,16 @@
 # Histórico de alterações
 
+## 2026-11-13 — Terceira rodada: proteção de coleta, backup e RLS corretamente identificado
+
+- Confirmado por consulta a pg_policies que regras *v161_active* são RESTRICTIVE e não ampliam acesso. Testes SQL de ADMIN e AUDITOR retornaram 3 e 0 auditorias de outro proprietário, respectivamente. Banco real não foi alterado.
+- Arquivo SQL anteriormente proposto e inseguro substituído por aviso sem DDL e relatório de segurança corrigido.
+- Validação de revisão explícita de sete seções; formulário incompleto não pode ser concluído. Coletas legadas preservadas para revisão.
+- Salvamento iniciado ao ocultar/fechar a página e aviso ao deixar a aba com alterações em aberto.
+- Backup ZIP local de auditorias, fotografias e conflitos da conta autorizada, com aviso de ausência de bytes e sem sincronização nem restauração automática.
+- pullRemote passa a recuperar automaticamente apenas auditorias do proprietário, sem copiar privacidade de outros ao celular do ADMIN.
+- Módulos adicionados ao cache da PWA e documentação atualizada; main e dados Supabase preservados.
+
+
 ## 2026-11-13 — Segunda rodada: início de indicadores e tombos
 
 - Novo módulo de indicadores lê resumos de iluminação e instalações hidráulicas já coletados no dispositivo, somente após autorização da conta, sem criar classificações ambientais ou consumo fictício.
