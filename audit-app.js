@@ -994,7 +994,9 @@ const AUDIT_APP = (() => {
     if (completeButton) completeButton.disabled = true;
     const completingRecord = audit;
     const completingEnvironment = environment?.environmentId;
-    const isCurrentCompletion = () => audit === completingRecord && !modal.hidden &&
+    const completingEditor = editorUserId;
+    const isCurrentCompletion = () => audit?.auditId === completingRecord.auditId &&
+      editorUserId === completingEditor && !modal.hidden &&
       environment?.environmentId === completingEnvironment;
     try {
     // Não permitir conclusão com seções sem revisão explícita.
@@ -1019,8 +1021,10 @@ const AUDIT_APP = (() => {
     markDirty();
     try {
       await localSaveQueue.catch(() => {});
-      await AUDIT_STORAGE.saveAudit(audit);
+      await AUDIT_STORAGE.saveAudit(completingRecord);
+      if (!isCurrentCompletion()) return;
     } catch (error) {
+      if (!isCurrentCompletion()) return;
       audit.status = previousStatus;
       audit.completedAt = previousCompletedAt;
       isDirty = true;
