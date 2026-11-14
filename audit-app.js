@@ -792,8 +792,9 @@ const AUDIT_APP = (() => {
     if (nextStep === stepIndex) return;
     stepIndex = nextStep;
     audit.currentStep = nextStep;
-    // A etapa também deve ser salva mesmo quando nenhuma resposta foi alterada.
-    if (!isDirty) markDirty();
+    // Mudar de etapa cria uma nova mutação mesmo se uma gravação anterior
+    // ainda está em andamento, impedindo confirmação remota de etapa antiga.
+    markDirty();
     scheduleSave(true);
     renderStep();
   }
