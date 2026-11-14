@@ -1,4 +1,4 @@
-# Mapa interativo – Campus Jorge Vassilakis (main v16.3; branch de testes v16.5.2)
+# Mapa interativo – Campus Jorge Vassilakis (main v16.3; branch de testes v16.5.3)
 
 Mapa estático e interativo em HTML, CSS, JavaScript e SVG, criado com base na planta de referência e nas informações confirmadas do Campus Jorge Vassilakis.
 
@@ -217,3 +217,15 @@ Faça testes em uma cópia/ambiente de ensaio, com conta aprovada: login, altera
 - A bateria de testes de lógica e estrutura tem agora 57 cenários: 52 regressões existentes mais 5 específicos para troca de sala, sincronização parcial, sincronização simultânea e cache. Não são testes autenticados no navegador.
 
 Não houve alteração de dados do banco, fotos, salas, identificadores nem publicação na `main`.
+
+
+## Varredura final v16.5.3 — 14/11/2026
+
+- Conclusão protegida contra cliques duplicados e respostas tardias de sincronização ou troca de conta.
+- Listas administrativas são apagadas imediatamente ao encerrar/trocar sessão; respostas da conta antiga não são exibidas.
+- A RPC de auditoria compartilhada vincula o editor à conta iniciadora e interrompe o fluxo se a sessão mudar durante a consulta.
+- O cache offline não armazena páginas de retorno de login, requisições estáticas com parâmetros nem caminhos desconhecidos.
+- Os nove documentos obrigatórios de `AGENTS.md` foram criados; não trazem posições, indicadores ou medições inventados.
+- Foram executados 66 cenários de lógica/estrutura em ambiente de simulação JavaScript, incluindo novas regressões de conclusão, sessão e colaboração. Não substituem teste E2E, autenticação real nem câmera Android.
+
+O estado da `main` e os registros do Supabase permanecem intocados. Não limpar os dados do navegador de origem antes de conferir coletas e evidências.
