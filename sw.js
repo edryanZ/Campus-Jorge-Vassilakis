@@ -1,6 +1,6 @@
 'use strict';
 
-const CACHE_NAME = 'campus-auditoria-v16-5-2-seguranca-cache';
+const CACHE_NAME = 'campus-auditoria-v16-5-3-varredura-final';
 const APP_CACHE_PREFIX = 'campus-auditoria-';
 const LOCAL_ASSETS = [
   './', './index.html', './styles.css', './app.js', './campus-data.js',
@@ -41,6 +41,9 @@ self.addEventListener('fetch', event => {
     CACHED_PATHS.has(url.pathname);
   const isLocalAsset = isLocal && CACHED_PATHS.has(url.pathname);
   if (!isPageNavigation && !isLocalAsset && !isPinnedSdk) return;
+  // Uma imagem/script com parâmetros sensíveis também não deve virar
+  // chave permanente do cache. Navegações com query continuam network-first.
+  if (url.search && !isPageNavigation) return;
 
   if (isPageNavigation || (isLocalAsset && url.pathname.endsWith('/supabase-config.js'))) {
     event.respondWith((async () => {
