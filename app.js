@@ -809,9 +809,15 @@ function setupInteractions() {
       suppressMapClick = true;
       mapViewport.setPointerCapture(event.pointerId);
     }
+    // Converter o gesto em coordenadas reais do SVG. No modo ampliado
+    // em retrato, preserveAspectRatio cria margens, então largura/altura
+    // do painel não são uma conversão confiável para 1500×920.
+    const matrix = mapSvg.getScreenCTM();
     const rect = mapViewport.getBoundingClientRect();
-    transform.x = dragState.x + ((event.clientX - dragState.startX) / rect.width) * 1500;
-    transform.y = dragState.y + ((event.clientY - dragState.startY) / rect.height) * 920;
+    const pixelsPerSvgUnit = matrix && Math.abs(matrix.a) > 0.001
+      ? Math.abs(matrix.a) : rect.width / 1500;
+    transform.x = dragState.x + (event.clientX - dragState.startX) / pixelsPerSvgUnit;
+    transform.y = dragState.y + (event.clientY - dragState.startY) / pixelsPerSvgUnit;
     applyTransform();
   });
   mapViewport.addEventListener('pointerup', event => {
