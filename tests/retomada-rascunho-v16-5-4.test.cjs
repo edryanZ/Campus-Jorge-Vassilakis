@@ -104,8 +104,9 @@ test('rascunho local com sincronização pendente não é substituído', async (
 test('fluxo de retomada avisa e preserva conflitos', () => {
   const app = read('audit-app.js');
   const remote = read('audit-remote.js');
-  assert.match(app, /Auditoria existente recuperada/);
-  assert.match(app, /Nenhuma nova auditoria foi criada/);
+  assert.match(app, /Rascunho aberto/);
+  assert.match(app, /Ainda não há respostas de coleta/);
+  assert.match(app, /Histórico de auditorias · consulta sem alterar seus registros/);
   assert.match(remote, /LOCAL_ANSWERS_MISSING_REMOTE/);
   assert.match(remote, /preserveConflict\(local, remote, 'LOCAL_ANSWERS_MISSING_REMOTE'\)/);
 });
