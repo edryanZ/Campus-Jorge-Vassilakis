@@ -150,15 +150,22 @@ const AUDIT_STORAGE = (() => {
       read.onerror = () => { failure = read.error; tx.abort(); };
       read.onsuccess = () => {
         const current = read.result;
-        superseded = Boolean(current && current.mutationId !== sentMutationId);
+        // Uma confirmação do servidor sem respostas nunca pode apagar
+        // respostas já armazenadas no navegador, mesmo se o ID de mutação
+        // for o mesmo. Sinalizar divergência para análise manual.
+        const missingAnswers = Boolean(current && AUDIT_SYNC_CORE.hasCollectedAnswers(current) &&
+          !AUDIT_SYNC_CORE.hasCollectedAnswers(remote));
+        superseded = Boolean(current && current.mutationId !== sentMutationId) || missingAnswers;
         result = superseded ? {
           ...current,
           ownerId: current.ownerId || remote.ownerId,
           localOwnerKey: current.ownerId || remote.ownerId ? null : current.localOwnerKey,
           serverRevision: Math.max(Number(current.serverRevision || 0), Number(remote.serverRevision || 0)),
           lastSyncedAt: remote.lastSyncedAt || current.lastSyncedAt,
-          syncState: current.syncState === 'CONFLICT' ? 'CONFLICT' : 'PENDING',
-          syncError: current.syncState === 'CONFLICT' ? current.syncError : null
+          syncState: missingAnswers || current.syncState === 'CONFLICT' ? 'CONFLICT' : 'PENDING',
+          syncError: missingAnswers
+            ? 'A confirmação remota não contém respostas locais; dados preservados para comparação.'
+            : current.syncState === 'CONFLICT' ? current.syncError : null
         } : remote;
         const put = store.put(result);
         put.onerror = () => { failure = put.error; tx.abort(); };
