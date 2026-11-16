@@ -142,3 +142,35 @@ test('leitura após gravação também é exigida na conclusão', () => {
   assert.match(app, /const persistedCompleted = await AUDIT_STORAGE.getAudit/);
   assert.match(app, /hasSameCollectedPayload\(completingRecord, persistedCompleted\)/);
 });
+
+test('RPC divergente não recebe confirmação de sincronização e guarda conflito', async () => {
+  const source = read('audit-remote.js');
+  const start = source.indexOf('async function requireMatchingRemotePayload(');
+  const end = source.indexOf('\n  async function syncSharedAuditOnce(', start);
+  assert.ok(start >= 0 && end > start);
+  const updates = [], conflicts = [];
+  const remoteToLocal = row => ({ ...row.private_payload, auditId: row.id,
+    environmentId: row.environment_id, status: row.status });
+  const factory = new Function('AUDIT_SYNC_CORE', 'remoteToLocal', 'AUDIT_STORAGE', 'preserveConflict',
+    source.slice(start, end) + '; return requireMatchingRemotePayload;');
+  const verify = factory(core, remoteToLocal,
+    { saveRemoteAcknowledgment: async (record, mutationId) => updates.push({ record, mutationId }) },
+    async (...args) => conflicts.push(args));
+  const expected = { ...filled };
+  const matched = { id: expected.auditId, environment_id: expected.environmentId,
+    status: expected.status, server_revision: 2, private_payload: expected };
+  assert.equal((await verify(expected, matched, 'teste')).data.lighting.total, '9');
+  assert.equal(updates.length, 0);
+  const missing = { ...matched,
+    private_payload: { ...expected, data: { ...expected.data, lighting: { led: '4' } } } };
+  let failed = false;
+  try { await verify(expected, missing, 'teste'); }
+  catch (error) {
+    failed = true;
+    assert.match(error.message, /divergem/);
+  }
+  assert.equal(failed, true);
+  assert.equal(updates.length, 1);
+  assert.equal(updates[0].record.syncState, 'CONFLICT');
+  assert.equal(conflicts.length, 1);
+});
