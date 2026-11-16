@@ -174,3 +174,80 @@ test('RPC divergente não recebe confirmação de sincronização e guarda confl
   assert.equal(updates[0].record.syncState, 'CONFLICT');
   assert.equal(conflicts.length, 1);
 });
+
+function createNavigationHarness(saveLogic) {
+  const app = read('audit-app.js');
+  const start = app.indexOf('let navigationInFlight = false;');
+  const end = app.indexOf('\n  function renderNonConformities()', start);
+  assert.ok(start >= 0 && end > start);
+  const factory = new Function('saveLogic', `
+    let stepIndex = 0;
+    let audit = { auditId: 'AUDIT-DADO-FICTICIO-PARA-TESTE', environmentId: 'BLOCO-A-SALA-2', currentStep: 0 };
+    const environment = { environmentId: 'BLOCO-A-SALA-2' };
+    const editorUserId = 'FAKE-USER';
+    const modal = { hidden: false };
+    const AUDIT_DATA = { STEPS: Array.from({ length: 9 }, () => ({})) };
+    const buttons = [{ disabled: false, isConnected: true }, { disabled: false, isConnected: true }];
+    const content = { querySelectorAll: () => buttons };
+    let isDirty = false, saveTimer = null, alerts = [], renders = 0;
+    const evidenceSaveFinished = Promise.resolve();
+    const clearTimeout = () => {};
+    const captureForm = () => { isDirty = true; };
+    async function saveNow() {
+      const response = await saveLogic();
+      isDirty = false;
+      return response;
+    }
+    const markDirty = () => { isDirty = true; };
+    const renderStep = () => { renders += 1; };
+    const showLocalSaveError = () => {};
+    const window = { alert: message => alerts.push(message) };
+    const AUDIT_REMOTE = { configured: false };
+    const navigator = { onLine: true };
+    const saveState = { textContent: '' };
+    const structuredClone = value => JSON.parse(JSON.stringify(value));
+    ${app.slice(start, end)}
+    return {
+      navigate,
+      state: () => ({ stepIndex, currentStep: audit.currentStep,
+        renders, alerts: alerts.length, disabled: buttons[0].disabled })
+    };
+  `);
+  return factory(saveLogic);
+}
+
+test('não muda de etapa antes da confirmação de gravação local', async () => {
+  let release;
+  const pendingSave = new Promise(resolve => { release = resolve; });
+  let calls = 0;
+  const testApp = createNavigationHarness(async () => {
+    calls += 1;
+    if (calls === 1) await pendingSave;
+    return {};
+  });
+  const navigation = testApp.navigate(1);
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(testApp.state().stepIndex, 0);
+  release();
+  await navigation;
+  assert.equal(testApp.state().stepIndex, 1);
+  assert.equal(testApp.state().renders, 1);
+});
+
+test('erro de gravação impede avanço e mantém formulário na tela', async () => {
+  const testApp = createNavigationHarness(async () => { throw new Error('DADO FICTÍCIO PARA TESTE'); });
+  await testApp.navigate(1);
+  assert.equal(testApp.state().stepIndex, 0);
+  assert.equal(testApp.state().renders, 0);
+  assert.equal(testApp.state().alerts, 1);
+  assert.equal(testApp.state().disabled, false);
+});
+
+test('toques concorrentes não avançam duas etapas', async () => {
+  let calls = 0;
+  const testApp = createNavigationHarness(async () => { calls += 1; return {}; });
+  await Promise.all([testApp.navigate(1), testApp.navigate(1)]);
+  assert.equal(testApp.state().stepIndex, 1);
+  assert.equal(calls, 2);
+});
