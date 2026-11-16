@@ -533,7 +533,16 @@ const AUDIT_REMOTE = (() => {
         } else await AUDIT_STORAGE.saveRemoteIfClean(remote);
       }
       else if (local.syncState === 'SYNCED' && Number(remote.serverRevision) >= Number(local.serverRevision || 0)) {
-        await AUDIT_STORAGE.saveRemoteIfClean(remote);
+        const recovery = await AUDIT_STORAGE.saveRemoteIfClean(remote);
+        if (recovery.protectedLocal) {
+          // A revisão do servidor está vazia, mas o dispositivo contém respostas.
+          // Preservar ambas as versões para comparação, sem apagá-las ou unificá-las.
+          const id = AUDIT_SYNC_CORE.conflictId(local, remote, 'LOCAL_ANSWERS_MISSING_REMOTE');
+          if (!(await AUDIT_STORAGE.getConflict(id))) {
+            await preserveConflict(local, remote, 'LOCAL_ANSWERS_MISSING_REMOTE');
+          }
+          conflicts += 1;
+        }
       } else if (Number(remote.serverRevision || 0) > Number(local.serverRevision || 0) && ['PENDING', 'ERROR', 'CONFLICT', 'LOCAL_ONLY'].includes(local.syncState)) {
         await preserveConflict(local, remote, 'REMOTE_NEWER');
         conflicts += 1;
