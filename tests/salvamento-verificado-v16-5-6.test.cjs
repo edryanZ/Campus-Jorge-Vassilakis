@@ -88,10 +88,10 @@ test('excluir um valor cria checkpoint sem apagar o original do histórico', asy
   const start = source.indexOf('async function saveAudit(record, options = {})');
   const end = source.indexOf('\n  const getEvidence', start);
   assert.ok(start >= 0 && end > start);
-  const factory = new Function('AUDIT_SYNC_CORE', 'structuredClone', 'openDatabase', 'normalizeAudit', 'STORES',
+  const factory = new Function('AUDIT_SYNC_CORE', 'AUDIT_DATA', 'structuredClone', 'openDatabase', 'normalizeAudit', 'STORES',
     source.slice(start, end) + '; return saveAudit;');
   const fake = createDb(filled);
-  const save = factory(core, structuredClone, async () => fake.db, structuredClone,
+  const save = factory(core, { STATUS: { COMPLETED: 'COMPLETED' } }, structuredClone, async () => fake.db, structuredClone,
     { AUDITS: 'audits', CONFLICTS: 'conflicts' });
   const newer = { ...filled, mutationId: 'MUTATION-2',
     data: { ...filled.data, lighting: { total: '9', led: '' } } };
@@ -108,10 +108,10 @@ test('mudança normal de valor não cria checkpoint desnecessário', async () =>
   const source = read('audit-storage.js');
   const start = source.indexOf('async function saveAudit(record, options = {})');
   const end = source.indexOf('\n  const getEvidence', start);
-  const factory = new Function('AUDIT_SYNC_CORE', 'structuredClone', 'openDatabase', 'normalizeAudit', 'STORES',
+  const factory = new Function('AUDIT_SYNC_CORE', 'AUDIT_DATA', 'structuredClone', 'openDatabase', 'normalizeAudit', 'STORES',
     source.slice(start, end) + '; return saveAudit;');
   const fake = createDb(filled);
-  const save = factory(core, structuredClone, async () => fake.db, structuredClone,
+  const save = factory(core, { STATUS: { COMPLETED: 'COMPLETED' } }, structuredClone, async () => fake.db, structuredClone,
     { AUDITS: 'audits', CONFLICTS: 'conflicts' });
   await save({ ...filled, mutationId: 'MUTATION-2', data: { ...filled.data, lighting: { total: '12', led: '5' } } });
   assert.equal(fake.checkpoints.size, 0);
