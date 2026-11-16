@@ -1,5 +1,19 @@
 # Histórico de alterações
 
+## v16.5.6 — Confirmação verificável do salvamento e sincronização (16/11/2026)
+
+**Diagnóstico:** o formulário permitia avançar sem aguardar a conclusão do salvamento local. A resposta de `sync_audit`, `sync_shared_audit` e `finalize_audit_sync` não era comparada aos campos e etapa enviados. Uma resposta HTTP bem-sucedida, por si só, não prova a integridade das respostas coletadas. Não foi possível determinar retroativamente a causa exata das respostas ausentes da Sala 2.
+
+- `audit-app.js`: o botão Avançar/Voltar aguarda salvar e reler a etapa anterior no IndexedDB antes de mudar de formulário. Falha mantém os campos visíveis, bloqueia o avanço e exibe erro. Conclusão também requer readback; operações concorrentes de navegação são serializadas.
+- `audit-sync-core.js`: comparação canônica do payload da auditoria (ID, ambiente, status, etapa, respostas, revisões de seção, não conformidades e referências de fotos); identificação de respostas anteriormente preenchidas que desapareceram.
+- `audit-remote.js`: cada resposta das RPCs de sincronização deve confirmar os dados enviados. Divergência salva estado CONFLICT, preserva cópias para análise e não retorna sincronização concluída.
+- `audit-storage.js`: transação única no IndexedDB grava a versão nova e um checkpoint da versão anterior sempre que alguma resposta, evidência ou não conformidade desaparecer. Se o checkpoint falhar, a transação inteira falha; nenhum dado é apagado por essa rotina. Recuperação remota e ACK protegem também **perdas parciais**, não só payload completamente vazio.
+- Mensagens distinguem gravação local, envio pendente, rascunho sem respostas e confirmação efetiva do Supabase.
+- PWA com cache `campus-auditoria-v16-5-6-salvamento-verificado`, sem limpeza de IndexedDB.
+- Testes automatizados incluídos em `tests/salvamento-verificado-v16-5-6.test.cjs` (dados fictícios, simulação de IndexedDB/RPC, testes de guardas). A execução em navegador Android real, Vercel e RPCs reais segue pendente até deploy e testes supervisionados.
+- Nenhuma alteração de tabelas, políticas RLS, registros de auditoria ou fotografias do Supabase faz parte do patch. Essa proteção diminui o risco de perda, mas não pode prometer persistência quando o usuário apaga dados do navegador, troca de domínio ou dispositivo sem backup/sincronização confirmada.
+
+
 ## v16.5.4 — Retomada de rascunhos e preservação de respostas (16/11/2026)
 
 - Na retomada, o sistema identifica quando o rascunho tem apenas a data e hora automáticas e explica que isso não representa respostas de coleta. O histórico e o formulário agora mostram avisos claros; o aviso estático "Pronto para iniciar" não permanece indevidamente ao consultar o histórico ou retomar.
