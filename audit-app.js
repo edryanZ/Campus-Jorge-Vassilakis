@@ -843,17 +843,63 @@ const AUDIT_APP = (() => {
     });
   }
 
-  function navigate(delta) {
-    captureForm();
+  let navigationInFlight = false;
+
+  async function navigate(delta) {
+    if (navigationInFlight || !audit || modal.hidden) return;
+    const startAuditId = audit.auditId;
+    const startEnvironmentId = environment?.environmentId;
+    const startEditorId = editorUserId;
+    const previousStep = stepIndex;
     const nextStep = Math.max(0, Math.min(AUDIT_DATA.STEPS.length - 1, stepIndex + delta));
     if (nextStep === stepIndex) return;
-    stepIndex = nextStep;
-    audit.currentStep = nextStep;
-    // Mudar de etapa cria uma nova mutação mesmo se uma gravação anterior
-    // ainda está em andamento, impedindo confirmação remota de etapa antiga.
-    markDirty();
-    scheduleSave(true);
-    renderStep();
+    const currentNavigation = () => !modal.hidden && audit?.auditId === startAuditId &&
+      environment?.environmentId === startEnvironmentId && editorUserId === startEditorId;
+    navigationInFlight = true;
+    const navButtons = [...content.querySelectorAll('[data-prev], [data-next]')];
+    navButtons.forEach(button => { button.disabled = true; });
+    try {
+      // Primeiro salvar o formulário antigo. Não desmontar o DOM antes
+      // do commit do IndexedDB; se falhar, manter campos visíveis.
+      await evidenceSaveFinished;
+      if (!currentNavigation()) return;
+      captureForm();
+      clearTimeout(saveTimer);
+      const result = await saveNow({ scheduleRemote: false });
+      if (!currentNavigation()) return;
+      if (result?.error || result?.superseded || isDirty)
+        throw result?.error || new Error('Os campos ainda não foram confirmados no armazenamento local.');
+
+      // Somente após confirmar a etapa de saída alterar o cursor.
+      stepIndex = nextStep;
+      audit.currentStep = nextStep;
+      markDirty();
+      const position = await saveNow({ scheduleRemote: false });
+      if (!currentNavigation()) return;
+      if (position?.error || position?.superseded || isDirty)
+        throw position?.error || new Error('A posição da próxima etapa ainda não foi gravada.');
+
+      renderStep();
+      saveState.textContent = '✓ Etapa anterior salva neste dispositivo · sincronização com o servidor pendente';
+      if (AUDIT_REMOTE.configured && navigator.onLine && !audit.collaborationEditorId) {
+        // O envio ocorre após o checkpoint local; nunca bloquear a coleta
+        // por uma conexão instável.
+        AUDIT_REMOTE.scheduleSync(structuredClone(audit)).catch(error =>
+          console.warn('[AuditRemote] Envio pendente após troca de etapa:', error));
+      }
+    } catch (error) {
+      if (!currentNavigation()) return;
+      // Em caso de falha, devolver o cursor à tela anterior, para que
+      // a pessoa possa copiar ou corrigir os valores sem perdê-los.
+      stepIndex = previousStep;
+      audit.currentStep = previousStep;
+      isDirty = true;
+      showLocalSaveError(error);
+      window.alert('Não foi possível confirmar o salvamento da etapa. Seus campos continuam na tela. Tente novamente antes de sair ou avançar.');
+    } finally {
+      navigationInFlight = false;
+      navButtons.forEach(button => { if (button.isConnected) button.disabled = false; });
+    }
   }
 
   function renderNonConformities() {
@@ -979,6 +1025,11 @@ const AUDIT_APP = (() => {
     savingWrites += 1;
     try { await transaction; }
     finally { savingWrites -= 1; }
+    // Commit confirmado não basta: conferir que o registro legível no
+    // IndexedDB contém precisamente os campos e a etapa deste snapshot.
+    const persisted = await AUDIT_STORAGE.getAudit(snapshot.auditId);
+    if (!persisted || !AUDIT_SYNC_CORE.hasSameCollectedPayload(snapshot, persisted))
+      throw new Error('A leitura do armazenamento local não confirmou os campos gravados.');
     if (!audit || audit.auditId !== snapshot.auditId) return { superseded: true };
     if (editGeneration !== savedGeneration) {
       scheduleSave();
