@@ -894,7 +894,9 @@ const AUDIT_APP = (() => {
           if (result?.synced && result.audit &&
               AUDIT_SYNC_CORE.hasSameCollectedPayload(submitted, result.audit)) {
             audit = result.audit;
-            saveState.textContent = '✓ Respostas e etapa confirmadas pelo Supabase';
+            saveState.textContent = AUDIT_SYNC_CORE.hasCollectedAnswers(result.audit)
+              ? '✓ Respostas e etapa confirmadas pelo Supabase'
+              : '✓ Rascunho sem respostas confirmado pelo Supabase';
           } else if (result?.error || result?.evidence) {
             saveState.textContent = result?.error
               ? '⚠ Salvo no dispositivo · o Supabase não confirmou as respostas. Confira a sincronização.'
@@ -1068,7 +1070,9 @@ const AUDIT_APP = (() => {
         if (!audit || audit.auditId !== scheduledAuditId || editGeneration !== savedGeneration) return;
         if (result?.synced && result.audit?.auditId === scheduledAuditId) {
           audit = result.audit;
-          saveState.textContent = `✓ Sincronizado com o Supabase · ${new Date(audit.lastSyncedAt).toLocaleTimeString('pt-BR')}`;
+          saveState.textContent = AUDIT_SYNC_CORE.hasCollectedAnswers(audit)
+            ? `✓ Respostas confirmadas no Supabase · ${new Date(audit.lastSyncedAt).toLocaleTimeString('pt-BR')}`
+            : '✓ Rascunho sem respostas sincronizado com o Supabase';
         } else if (result?.evidence && result.audit?.auditId === scheduledAuditId) {
           saveState.textContent = `⚠ Dados salvos · evidências: ${result.evidence.synced} sincronizada(s), ${result.evidence.pending} pendente(s), ${result.evidence.errors} com erro`;
         } else if (result?.error && audit?.auditId === scheduledAuditId) {
