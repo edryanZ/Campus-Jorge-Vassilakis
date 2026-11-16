@@ -881,7 +881,7 @@ const AUDIT_APP = (() => {
 
       renderStep();
       saveState.textContent = '✓ Etapa anterior salva neste dispositivo · sincronização com o servidor pendente';
-      if (AUDIT_REMOTE.configured && navigator.onLine && !audit.collaborationEditorId) {
+      if (AUDIT_REMOTE.configured && navigator.onLine) {
         // O envio ocorre após o checkpoint local; nunca bloquear a coleta
         // por uma conexão instável.
         AUDIT_REMOTE.scheduleSync(structuredClone(audit)).catch(error =>
@@ -1095,6 +1095,9 @@ const AUDIT_APP = (() => {
       await localSaveQueue.catch(() => {});
       if (!isCurrentCompletion()) return;
       await AUDIT_STORAGE.saveAudit(completingRecord);
+      const persistedCompleted = await AUDIT_STORAGE.getAudit(completingRecord.auditId);
+      if (!persistedCompleted || !AUDIT_SYNC_CORE.hasSameCollectedPayload(completingRecord, persistedCompleted))
+        throw new Error('A leitura do dispositivo não confirmou os dados da conclusão.');
       if (!isCurrentCompletion()) return;
     } catch (error) {
       if (!isCurrentCompletion()) return;
