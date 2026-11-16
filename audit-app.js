@@ -880,12 +880,32 @@ const AUDIT_APP = (() => {
         throw position?.error || new Error('A posição da próxima etapa ainda não foi gravada.');
 
       renderStep();
-      saveState.textContent = '✓ Etapa anterior salva neste dispositivo · sincronização com o servidor pendente';
+      saveState.textContent = AUDIT_REMOTE.configured
+        ? '✓ Etapa salva neste dispositivo · confirmação do Supabase pendente'
+        : '✓ Etapa salva neste dispositivo · sincronização não configurada';
       if (AUDIT_REMOTE.configured && navigator.onLine) {
-        // O envio ocorre após o checkpoint local; nunca bloquear a coleta
-        // por uma conexão instável.
-        AUDIT_REMOTE.scheduleSync(structuredClone(audit)).catch(error =>
-          console.warn('[AuditRemote] Envio pendente após troca de etapa:', error));
+        // Somente o payload efetivamente conferido no RPC pode receber
+        // indicação de sincronização; a cópia local permanece a fonte segura.
+        const syncGeneration = editGeneration;
+        const submitted = structuredClone(audit);
+        AUDIT_REMOTE.scheduleSync(submitted).then(result => {
+          if (modal.hidden || !audit || audit.auditId !== submitted.auditId ||
+              editorUserId !== startEditorId || editGeneration !== syncGeneration) return;
+          if (result?.synced && result.audit &&
+              AUDIT_SYNC_CORE.hasSameCollectedPayload(submitted, result.audit)) {
+            audit = result.audit;
+            saveState.textContent = '✓ Respostas e etapa confirmadas pelo Supabase';
+          } else if (result?.error || result?.evidence) {
+            saveState.textContent = result?.error
+              ? '⚠ Salvo no dispositivo · o Supabase não confirmou as respostas. Confira a sincronização.'
+              : '⚠ Dados salvos · fotografias ainda aguardam confirmação do Supabase';
+          }
+        }).catch(error => {
+          console.warn('[AuditRemote] Envio pendente após troca de etapa:', error);
+          if (!modal.hidden && audit?.auditId === submitted.auditId &&
+              editGeneration === syncGeneration)
+            saveState.textContent = '⚠ Salvo no dispositivo · erro ao confirmar o Supabase';
+        });
       }
     } catch (error) {
       if (!currentNavigation()) return;
