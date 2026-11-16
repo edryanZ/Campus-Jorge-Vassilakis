@@ -93,7 +93,8 @@ const AUDIT_STORAGE = (() => {
     const audit = normalizeAudit(record);
     const db = await openDatabase();
     return new Promise((resolve, reject) => {
-      const tx = db.transaction(STORES.AUDITS, 'readwrite');
+      const tx = db.transaction([STORES.AUDITS, STORES.CONFLICTS], 'readwrite');
+      const conflictStore = tx.objectStore(STORES.CONFLICTS);
       const store = tx.objectStore(STORES.AUDITS);
       const existingRequest = store.get(audit.auditId);
       let failure = null;
@@ -111,7 +112,29 @@ const AUDIT_STORAGE = (() => {
           failure = new Error('Auditorias concluídas são imutáveis. Crie uma nova auditoria.'); tx.abort(); return;
         }
         const allRequest = options.enforceActiveUniqueness && AUDIT_SYNC_CORE.isActiveAudit(audit) ? store.getAll() : null;
-        const put = () => { const request = store.put(audit); request.onerror = () => { failure = request.error; tx.abort(); }; };
+        const put = () => {
+          if (existing && AUDIT_SYNC_CORE.hasRemovedAnswers(existing, audit)) {
+            // Snapshot anterior e formulário novo no mesmo commit IndexedDB.
+            // Se a cópia de segurança falhar, a versão antiga permanece intacta.
+            const checkpoint = {
+              conflictId: 'CHECKPOINT-LOCAL-' + audit.auditId + '-' +
+                (existing.mutationId || existing.updatedAt || 'NO_MUTATION'),
+              sourceAuditId: audit.auditId,
+              environmentId: audit.environmentId,
+              ownerId: existing.ownerId || audit.ownerId || null,
+              reason: 'LOCAL_FIELDS_REMOVED',
+              resolutionState: 'UNRESOLVED',
+              createdAt: new Date().toISOString(),
+              localSnapshot: structuredClone(existing),
+              remoteSnapshot: structuredClone(audit),
+              evidenceManifest: []
+            };
+            const backup = conflictStore.put(checkpoint);
+            backup.onerror = () => { failure = backup.error; tx.abort(); };
+          }
+          const request = store.put(audit);
+          request.onerror = () => { failure = request.error; tx.abort(); };
+        };
         if (!allRequest) { put(); return; }
         allRequest.onerror = () => { failure = allRequest.error; tx.abort(); };
         allRequest.onsuccess = () => {
@@ -153,8 +176,8 @@ const AUDIT_STORAGE = (() => {
         // Uma confirmação do servidor sem respostas nunca pode apagar
         // respostas já armazenadas no navegador, mesmo se o ID de mutação
         // for o mesmo. Sinalizar divergência para análise manual.
-        const missingAnswers = Boolean(current && AUDIT_SYNC_CORE.hasCollectedAnswers(current) &&
-          !AUDIT_SYNC_CORE.hasCollectedAnswers(remote));
+        const missingAnswers = Boolean(current &&
+          AUDIT_SYNC_CORE.hasRemovedAnswers(current, remote));
         superseded = Boolean(current && current.mutationId !== sentMutationId) || missingAnswers;
         result = superseded ? {
           ...current,
@@ -164,7 +187,7 @@ const AUDIT_STORAGE = (() => {
           lastSyncedAt: remote.lastSyncedAt || current.lastSyncedAt,
           syncState: missingAnswers || current.syncState === 'CONFLICT' ? 'CONFLICT' : 'PENDING',
           syncError: missingAnswers
-            ? 'A confirmação remota não contém respostas locais; dados preservados para comparação.'
+            ? 'A confirmação remota omitiu respostas locais; dados preservados para comparação.'
             : current.syncState === 'CONFLICT' ? current.syncError : null
         } : remote;
         const put = store.put(result);
@@ -196,8 +219,7 @@ const AUDIT_STORAGE = (() => {
         // Nunca deixar um snapshot remoto sem respostas substituir a coleta
         // preenchida e ainda existente neste dispositivo, mesmo quando a
         // versão local foi marcada SYNCED por um cliente anterior.
-        if (current && AUDIT_SYNC_CORE.hasCollectedAnswers(current) &&
-            !AUDIT_SYNC_CORE.hasCollectedAnswers(remote)) {
+        if (current && AUDIT_SYNC_CORE.hasRemovedAnswers(current, remote)) {
           protectedLocal = true;
           return;
         }
