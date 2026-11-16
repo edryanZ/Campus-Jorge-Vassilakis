@@ -692,7 +692,7 @@ function zoomBy(factor, clientX = null, clientY = null) {
 
 function resetView() {
   transform = { x: 0, y: 0, scale: 1 };
-  mapUnlocked = !mapBreakpoint.matches;
+  mapUnlocked = mapExpanded || !mapBreakpoint.matches;
   applyTransform();
   syncMapMode();
   routeLayer.innerHTML = '';
@@ -774,7 +774,8 @@ function setupInteractions() {
         return;
       }
     }
-    if (event.target.closest?.('.map-feature')) return;
+    // Um gesto de arrastar pode começar em cima de uma sala.
+    // Um toque curto ainda seleciona a sala normalmente.
     dragState = {
       pointerId: event.pointerId,
       startX: event.clientX,
@@ -816,7 +817,10 @@ function setupInteractions() {
   mapViewport.addEventListener('pointerup', event => {
     mapPointers.delete(event.pointerId);
     if (mapPointers.size < 2) lastPinchDistance = null;
-    if (!dragState || event.pointerId !== dragState.pointerId) return;
+    if (!dragState || event.pointerId !== dragState.pointerId) {
+      if (!mapPointers.size) setTimeout(() => { suppressMapClick = false; }, 0);
+      return;
+    }
     const completedPan = dragState.isPanning;
     dragState = null;
     if (mapViewport.hasPointerCapture(event.pointerId)) mapViewport.releasePointerCapture(event.pointerId);
@@ -829,6 +833,15 @@ function setupInteractions() {
     if (mapViewport.hasPointerCapture(event.pointerId)) mapViewport.releasePointerCapture(event.pointerId);
     suppressMapClick = false;
   });
+  // Capturar o clique ANTES do handler da sala impede selecionar uma
+  // sala ao terminar de arrastar ou fazer zoom com dois dedos.
+  mapSvg.addEventListener('click', event => {
+    if (suppressMapClick) {
+      suppressMapClick = false;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }
+  }, true);
   mapSvg.addEventListener('click', event => {
     if (suppressMapClick) {
       suppressMapClick = false;
