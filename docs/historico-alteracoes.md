@@ -1,5 +1,17 @@
 # Histórico de alterações
 
+## v16.5.5 — Mapa no celular: enquadramento e ampliação (16/11/2026)
+
+- O viewport mobile usa a proporção original da planta (1500×920), evitando faixas vazias acima e abaixo do mapa na visualização inicial.
+- Novo botão **Ampliar mapa / Fechar ampliação** abre o mapa em tela cheia, sem alterar IDs, coordenadas ou dados dos ambientes.
+- Zoom (+/−) permanece disponível no modo fixo; ao usar o botão o modo de exploração é habilitado. O zoom é centralizado no viewport e aceita gesto de pinça no celular.
+- Arrastar sobre salas não dispara seleção acidental; o cálculo da distância usa a matriz real do SVG em retrato ou desktop.
+- **Visão geral** é independente do modo ampliado; teclado Escape fecha ampliação. Rótulo do botão usa `aria-expanded`.
+- Novo cache PWA `campus-auditoria-v16-5-5-mapa-enquadrado`; não há limpeza de IndexedDB ou alteração de registro.
+- Teste de regressão em `tests/mapa-ampliado-mobile-v16-5-5.test.cjs` e verificações estruturais. Navegador Android real ainda precisa ser conferido após publicação aprovada.
+- **Investigação de registros:** cópias locais em `campusjvunir.vercel.app` e `campusunirjv.vercel.app` pertencem a origens separadas; **não migrar nem apagar automaticamente**. Restaurar somente após backup e conferência da conta/autorização.
+
+
 ## v16.5.4 — Retomada de rascunhos e preservação de respostas (16/11/2026)
 
 - Na retomada, o sistema identifica quando o rascunho tem apenas a data e hora automáticas e explica que isso não representa respostas de coleta. O histórico e o formulário agora mostram avisos claros; o aviso estático "Pronto para iniciar" não permanece indevidamente ao consultar o histórico ou retomar.
