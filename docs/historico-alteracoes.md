@@ -1,5 +1,16 @@
 # Histórico de alterações
 
+## v16.5.4 — Retomada de rascunhos e preservação de respostas (16/11/2026)
+
+- Na retomada, o sistema identifica quando o rascunho tem apenas a data e hora automáticas e explica que isso não representa respostas de coleta. O histórico e o formulário agora mostram avisos claros; o aviso estático "Pronto para iniciar" não permanece indevidamente ao consultar o histórico ou retomar.
+- A recuperação remota não pode substituir automaticamente uma auditoria local preenchida por um payload remoto sem respostas, mesmo quando a cópia local aparece como sincronizada.
+- Quando essa divergência é detectada no pull do Supabase, são preservados snapshots locais e remotos no mecanismo de conflitos; nenhuma resposta ou fotografia é excluída automaticamente.
+- A confirmação de sincronização também preserva os dados locais e marca conflito se a resposta remota vier sem as respostas que ainda estão no navegador.
+- Teste de regressão: `tests/retomada-rascunho-v16-5-4.test.cjs`. Testes com dados fictícios e simulação de transação; validação de navegador Android e endereço público permanece necessária.
+- Diagnóstico somente leitura de BLOCO-A-SALA-2: as seis revisões do Supabase até 16/11/2026 têm só data e hora na identificação, sem respostas adicionais. Isso não comprova ausência de um rascunho mais completo no IndexedDB de outro dispositivo.
+- Nenhuma alteração de banco, migração, permissões ou registros reais faz parte desta correção.
+
+
 ## 2026-11-14 — Varredura final de código e segurança (v16.5.3, somente testes)
 
 - `audit-app.js`: confirmação de auditoria serializada para impedir duplo clique e gravações concorrentes. Reações a respostas remotas verificam identidade/ambiente antes de atualizar a tela. A troca de conta invalida solicitações administrativas antigas e limpa nomes/e-mails da interface.
