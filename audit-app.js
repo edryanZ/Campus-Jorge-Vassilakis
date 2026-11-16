@@ -320,6 +320,11 @@ const AUDIT_APP = (() => {
     openModal();
     renderStep();
     await saveNow({ scheduleRemote: false });
+    // "Sincronizado" significa que o snapshot foi salvo, não que as nove
+    // etapas contenham respostas. Esclarecer a retomada na própria tela.
+    saveState.textContent = AUDIT_SYNC_CORE.hasCollectedAnswers(audit)
+      ? `✓ Auditoria existente recuperada · etapa ${stepIndex + 1} de ${AUDIT_DATA.STEPS.length}`
+      : 'Auditoria existente recuperada · ainda sem respostas preenchidas (somente data e hora).';
     if (AUDIT_REMOTE.configured && navigator.onLine && !access.offline &&
         ['LOCAL_ONLY', 'PENDING', 'ERROR'].includes(audit.syncState)) {
       AUDIT_REMOTE.scheduleSync(audit).catch(error => console.warn('[AuditRemote]', error));
@@ -437,6 +442,7 @@ const AUDIT_APP = (() => {
             <span>${escapeHtml(new Date(item.updatedAt).toLocaleString('pt-BR'))}</span>
             <small class="sync-badge">${escapeHtml(syncLabel(item.syncState))}</small>
             ${evidenceStatusMarkup(evidenceByAudit.get(item.auditId))}
+            ${!AUDIT_SYNC_CORE.hasCollectedAnswers(item) ? '<small>Registro existente, porém sem respostas preenchidas além da data e hora. Continuar não cria outra auditoria.</small>' : ''}
             <button type="button" data-local-details="${escapeHtml(item.auditId)}">Ver dados preenchidos</button>
             ${allowedResume ? `<button type="button" data-resume="${escapeHtml(item.auditId)}">Continuar auditoria</button>` : ''}
             </article>`);
@@ -713,6 +719,9 @@ const AUDIT_APP = (() => {
     content.innerHTML = `
       <div class="audit-progress"><div style="width:${progress}%"></div></div>
       <p class="audit-step-count">Etapa ${stepIndex + 1} de ${AUDIT_DATA.STEPS.length} · ${progress}%</p>
+      ${stepIndex === 0 && !AUDIT_SYNC_CORE.hasCollectedAnswers(audit)
+        ? '<p class="audit-note">Este é um rascunho já registrado. Ainda não há respostas de coleta salvas; a data e a hora foram preenchidas automaticamente. Nenhuma nova auditoria foi criada ao continuar.</p>'
+        : ''}
       <form id="auditForm" class="audit-form">${stepMarkup(step.id)}${sectionChecklist}</form>
       <nav class="audit-nav">
         <button type="button" class="audit-secondary" data-prev ${stepIndex === 0 ? 'disabled' : ''}>Voltar</button>
