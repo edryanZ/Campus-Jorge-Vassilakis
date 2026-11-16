@@ -20,11 +20,17 @@ let dragState = null;
 let suppressMapClick = false;
 
 const PAN_THRESHOLD_PX = 6;
+const MAX_MAP_ZOOM = 5.5;
+const mapPointers = new Map();
+let lastPinchDistance = null;
+let mapExpanded = false;
 
 const svgNS = 'http://www.w3.org/2000/svg';
 const buildingsLayer = document.getElementById('buildingsLayer');
 const routeLayer = document.getElementById('routeLayer');
 const mapViewport = document.getElementById('mapViewport');
+const mapPanel = document.querySelector('.map-panel');
+const mapExpandBtn = document.getElementById('mapExpandBtn');
 const mapSvg = document.getElementById('campusMap');
 const panZoomLayer = document.getElementById('panZoomLayer');
 const tooltip = document.getElementById('mapTooltip');
@@ -36,18 +42,32 @@ const mapMoveToggle = document.getElementById('mapMoveToggle');
 const mapResetButton = document.getElementById('mapResetBtn');
 const mapLocationPicker = document.getElementById('mapLocationPicker');
 const mapHint = document.getElementById('mapHint');
-const mapBreakpoint = window.matchMedia('(max-width: 820px)');
+const mapBreakpoint = window.matchMedia('(max-width: 820px), (pointer: coarse) and (max-width: 1180px)');
 let mapUnlocked = !mapBreakpoint.matches;
 
 function syncMapMode() {
   mapViewport.classList.toggle('is-navigation-locked', !mapUnlocked);
   mapMoveToggle.textContent = mapUnlocked ? 'Fixar mapa' : 'Explorar mapa';
   mapMoveToggle.setAttribute('aria-pressed', String(mapUnlocked));
-  document.getElementById('zoomInBtn').disabled = !mapUnlocked;
-  document.getElementById('zoomOutBtn').disabled = !mapUnlocked;
+  // Botões de zoom disponíveis inclusive no estado inicial fixo.
   mapHint.textContent = mapUnlocked
     ? 'Exploração ativa: arraste para mover, use o zoom ou escolha uma sala.'
     : 'Mapa fixo: toque em uma sala para ver detalhes. Use “Visão geral” para mostrar todo o campus.';
+}
+
+function setMapExpanded(expanded) {
+  mapExpanded = Boolean(expanded);
+  mapPanel.classList.toggle('is-map-expanded', mapExpanded);
+  document.body.classList.toggle('is-map-expanded', mapExpanded);
+  mapExpandBtn.setAttribute('aria-expanded', String(mapExpanded));
+  mapExpandBtn.textContent = mapExpanded ? 'Fechar ampliação' : 'Ampliar mapa';
+  if (mapExpanded) {
+    mapUnlocked = true;
+    syncMapMode();
+    mapExpandBtn.focus();
+  }
+  // A câmera é preservada; o botão Visão geral faz o reset independente.
+  applyTransform();
 }
 
 function refreshLocationPicker() {
@@ -402,6 +422,7 @@ function selectLocation(id) {
   const item = locationRegistry.get(id);
   if (!item) return;
   if (mapBreakpoint.matches) hideTooltip();
+  if (mapExpanded) setMapExpanded(false); // Expor painel de detalhes sem descartar zoom.
   selectedId = id;
   document.querySelectorAll('.map-feature').forEach(el => el.classList.toggle('is-selected', el.dataset.id === id));
   renderDetails(item);
@@ -516,7 +537,7 @@ function focusLocation(id) {
   if (!el) return;
   const bbox = el.getBBox();
   const viewport = mapViewport.getBoundingClientRect();
-  const targetScale = Math.min(2.2, Math.max(1.25, Math.min(viewport.width / (bbox.width * 4), viewport.height / (bbox.height * 4))));
+  const targetScale = Math.min(3.6, Math.max(1.6, Math.min(viewport.width / (bbox.width * 4), viewport.height / (bbox.height * 4))));
   mapUnlocked = true;
   syncMapMode();
   transform.scale = targetScale;
@@ -633,7 +654,7 @@ function escapeHtml(value) {
 }
 
 function applyTransform() {
-  const scale = Math.max(1, Math.min(3.2, transform.scale));
+  const scale = Math.max(1, Math.min(MAX_MAP_ZOOM, transform.scale));
   transform.scale = scale;
   // Nunca permitir que o campus inteiro desapareça do enquadramento.
   transform.x = Math.max(1500 * (1 - scale), Math.min(0, transform.x));
@@ -642,8 +663,16 @@ function applyTransform() {
 }
 
 function zoomBy(factor, clientX = null, clientY = null) {
+  // Um toque nos botões + ou − também libera a exploração do mapa fixo.
+  if (!mapUnlocked) { mapUnlocked = true; syncMapMode(); }
   const oldScale = transform.scale;
-  const newScale = Math.max(1, Math.min(3.2, oldScale * factor));
+  const newScale = Math.max(1, Math.min(MAX_MAP_ZOOM, oldScale * factor));
+  // Usar centro do viewport quando o botão não fornece coordenadas.
+  if (clientX === null || clientY === null) {
+    const rect = mapViewport.getBoundingClientRect();
+    clientX = rect.left + rect.width / 2;
+    clientY = rect.top + rect.height / 2;
+  }
   if (clientX !== null && clientY !== null) {
     // getScreenCTM respeita as margens do SVG no celular (preserveAspectRatio).
     const matrix = mapSvg.getScreenCTM();
@@ -681,6 +710,7 @@ function setupInteractions() {
       searchInput.focus();
     }
     if (event.key === 'Escape') {
+      if (mapExpanded) { setMapExpanded(false); return; }
       clearSelection();
       searchInput.blur();
     }
@@ -711,6 +741,7 @@ function setupInteractions() {
     syncMapMode();
   });
   mapResetButton.addEventListener('click', resetView);
+  mapExpandBtn.addEventListener('click', () => setMapExpanded(!mapExpanded));
   mapLocationPicker.addEventListener('change', () => {
     const id = mapLocationPicker.value;
     if (!id) return;
@@ -732,7 +763,17 @@ function setupInteractions() {
   }, { passive: false });
 
   mapViewport.addEventListener('pointerdown', event => {
-    if (!mapUnlocked || event.button !== 0) return;
+    if (!mapUnlocked || (event.pointerType === 'mouse' && event.button !== 0)) return;
+    if (event.pointerType === 'touch') {
+      mapPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      if (mapPointers.size === 2) {
+        const points = [...mapPointers.values()];
+        lastPinchDistance = Math.hypot(points[1].x - points[0].x, points[1].y - points[0].y);
+        dragState = null;
+        suppressMapClick = true;
+        return;
+      }
+    }
     if (event.target.closest?.('.map-feature')) return;
     dragState = {
       pointerId: event.pointerId,
@@ -745,6 +786,20 @@ function setupInteractions() {
     suppressMapClick = false;
   });
   mapViewport.addEventListener('pointermove', event => {
+    if (mapPointers.has(event.pointerId)) {
+      mapPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      if (mapPointers.size === 2) {
+        const points = [...mapPointers.values()];
+        const distance = Math.hypot(points[1].x - points[0].x, points[1].y - points[0].y);
+        if (lastPinchDistance && distance > 0) {
+          const midpointX = (points[0].x + points[1].x) / 2;
+          const midpointY = (points[0].y + points[1].y) / 2;
+          zoomBy(distance / lastPinchDistance, midpointX, midpointY);
+        }
+        lastPinchDistance = distance;
+        return;
+      }
+    }
     if (!dragState || event.pointerId !== dragState.pointerId) return;
     const distance = Math.hypot(event.clientX - dragState.startX, event.clientY - dragState.startY);
     if (!dragState.isPanning) {
@@ -759,6 +814,8 @@ function setupInteractions() {
     applyTransform();
   });
   mapViewport.addEventListener('pointerup', event => {
+    mapPointers.delete(event.pointerId);
+    if (mapPointers.size < 2) lastPinchDistance = null;
     if (!dragState || event.pointerId !== dragState.pointerId) return;
     const completedPan = dragState.isPanning;
     dragState = null;
@@ -766,6 +823,8 @@ function setupInteractions() {
     if (completedPan) setTimeout(() => { suppressMapClick = false; }, 0);
   });
   mapViewport.addEventListener('pointercancel', event => {
+    mapPointers.delete(event.pointerId);
+    if (mapPointers.size < 2) lastPinchDistance = null;
     if (dragState?.pointerId === event.pointerId) dragState = null;
     if (mapViewport.hasPointerCapture(event.pointerId)) mapViewport.releasePointerCapture(event.pointerId);
     suppressMapClick = false;
