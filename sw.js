@@ -1,6 +1,6 @@
 'use strict';
 
-const CACHE_NAME = 'campus-auditoria-v16-5-4-retomada-segura';
+const CACHE_NAME = 'campus-auditoria-v16-5-6-salvamento-verificado';
 const APP_CACHE_PREFIX = 'campus-auditoria-';
 const LOCAL_ASSETS = [
   './', './index.html', './styles.css', './app.js', './campus-data.js',
