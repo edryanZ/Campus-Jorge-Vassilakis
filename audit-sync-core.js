@@ -78,8 +78,24 @@ const AUDIT_SYNC_CORE = (() => {
     return `CONFLICT-${reason}-${source}-${localRevision}-${remoteRevision}-${mutation}`;
   }
 
+  // Data e hora são preenchidas automaticamente ao criar um rascunho:
+  // sozinhas não demonstram que a coleta começou.
+  function hasCollectedAnswers(record = {}) {
+    if ((record.nonConformities || []).length || (record.evidenceIds || []).length) return true;
+    if (Object.values(record.reviewedSteps || {}).some(value => value === true)) return true;
+    return Object.entries(record.data || {}).some(([section, values]) =>
+      values && typeof values === 'object' && Object.entries(values).some(([field, value]) => {
+        if (section === 'identification' && (field === 'date' || field === 'startTime')) return false;
+        if (value == null || value === '') return false;
+        if (typeof value === 'string') return value.trim().length > 0;
+        if (Array.isArray(value)) return value.length > 0;
+        if (typeof value === 'object') return Object.keys(value).length > 0;
+        return true;
+      }));
+  }
+
   return Object.freeze({
-    aggregateState, evidenceSummary, publicPayload, storagePath, pendingStates,
+    hasCollectedAnswers, aggregateState, evidenceSummary, publicPayload, storagePath, pendingStates,
     isRecoveryAudit, isActiveAudit, ownerKey, activeKey, isActiveUniqueViolation, conflictId
   });
 })();
