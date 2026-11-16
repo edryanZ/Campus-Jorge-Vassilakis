@@ -342,6 +342,27 @@ const AUDIT_REMOTE = (() => {
     return conflict;
   }
 
+  // Não confundir HTTP/RPC bem-sucedido com persistência das respostas.
+  // Uma divergência deve permanecer local e exigir conferência, nunca
+  // receber o selo de 'Sincronizado'.
+  async function requireMatchingRemotePayload(sent, row, stage) {
+    const received = row?.id ? remoteToLocal(row) : null;
+    if (received && AUDIT_SYNC_CORE.hasSameCollectedPayload(sent, received)) return received;
+    const message = 'O Supabase respondeu, mas os campos/etapa devolvidos divergem dos enviados (' +
+      stage + '). A auditoria local foi preservada; confira o conflito antes de sincronizar de novo.';
+    const conflictRecord = {
+      ...sent,
+      serverRevision: Math.max(Number(sent.serverRevision || 0), Number(row?.server_revision || 0)),
+      syncState: 'CONFLICT',
+      syncError: message
+    };
+    await AUDIT_STORAGE.saveRemoteAcknowledgment(conflictRecord, sent.mutationId);
+    if (received) {
+      await preserveConflict(sent, received, 'REMOTE_PAYLOAD_MISMATCH');
+    }
+    throw new Error(message);
+  }
+
   async function syncSharedAuditOnce(record, user) {
     if (!record?.collaborationEditorId || record.collaborationEditorId !== user.id)
       return { skipped: true, reason: 'OTHER_OWNER' };
@@ -370,7 +391,8 @@ const AUDIT_REMOTE = (() => {
     const row = Array.isArray(data) ? data[0] : data;
     if (!row?.id || !row.server_revision)
       throw new Error('O servidor não confirmou a edição compartilhada.');
-    const synced = { ...remoteToLocal(row), collaborationEditorId: user.id };
+    const verified = await requireMatchingRemotePayload(audit, row, 'participação compartilhada');
+    const synced = { ...verified, collaborationEditorId: user.id };
     const saved = await AUDIT_STORAGE.saveRemoteAcknowledgment(synced, audit.mutationId);
     dispatch('audit:sync-state', { auditId: saved.audit.auditId, state: saved.audit.syncState });
     return { synced: Boolean(row.sync_complete) && !saved.superseded, audit: saved.audit };
@@ -423,6 +445,7 @@ const AUDIT_REMOTE = (() => {
     }
     let row = Array.isArray(call.data) ? call.data[0] : call.data;
     if (!row?.id || !row.server_revision) throw new Error('O Supabase não confirmou a revisão salva.');
+    await requireMatchingRemotePayload(audit, row, 'gravação');
     audit.serverRevision = row.server_revision;
     await AUDIT_STORAGE.saveRemoteAcknowledgment(audit, audit.mutationId);
     const evidence = await syncEvidenceForAudit(audit.auditId, user.id);
@@ -439,7 +462,7 @@ const AUDIT_REMOTE = (() => {
     if (final.error) throw final.error;
     row = Array.isArray(final.data) ? final.data[0] : final.data;
     if (!row?.sync_complete) throw new Error('O Supabase não confirmou todos os dados e evidências.');
-    const syncedAudit = remoteToLocal(row);
+    const syncedAudit = await requireMatchingRemotePayload(audit, row, 'confirmação final');
     const saved = await AUDIT_STORAGE.saveRemoteAcknowledgment(syncedAudit, audit.mutationId);
     attempts.delete(audit.auditId);
     dispatch('audit:sync-state', { auditId: saved.audit.auditId, state: saved.audit.syncState, evidence: summary });
