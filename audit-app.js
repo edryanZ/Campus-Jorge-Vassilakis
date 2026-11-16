@@ -323,8 +323,8 @@ const AUDIT_APP = (() => {
     // "Sincronizado" significa que o snapshot foi salvo, não que as nove
     // etapas contenham respostas. Esclarecer a retomada na própria tela.
     saveState.textContent = AUDIT_SYNC_CORE.hasCollectedAnswers(audit)
-      ? `✓ Auditoria existente recuperada · etapa ${stepIndex + 1} de ${AUDIT_DATA.STEPS.length}`
-      : 'Auditoria existente recuperada · ainda sem respostas preenchidas (somente data e hora).';
+      ? `✓ Rascunho aberto · etapa ${stepIndex + 1} de ${AUDIT_DATA.STEPS.length}`
+      : 'Rascunho aberto · ainda sem respostas preenchidas (somente data e hora).';
     if (AUDIT_REMOTE.configured && navigator.onLine && !access.offline &&
         ['LOCAL_ONLY', 'PENDING', 'ERROR'].includes(audit.syncState)) {
       AUDIT_REMOTE.scheduleSync(audit).catch(error => console.warn('[AuditRemote]', error));
@@ -402,6 +402,7 @@ const AUDIT_APP = (() => {
     openModal();
     title.textContent = 'Histórico de auditorias';
     environmentLabel.textContent = `${target.blockName} · ${target.roomNumber ? `Sala ${target.roomNumber}` : target.name}`;
+    saveState.textContent = 'Histórico de auditorias · consulta sem alterar seus registros';
     content.innerHTML = '<div class="audit-empty"><h3>Consultando este dispositivo…</h3><p>Seus dados locais são consultados antes da rede.</p></div>';
     const isCurrent = () => requestId === historyRequestId && !modal.hidden
       && title.textContent === 'Histórico de auditorias'
@@ -720,7 +721,7 @@ const AUDIT_APP = (() => {
       <div class="audit-progress"><div style="width:${progress}%"></div></div>
       <p class="audit-step-count">Etapa ${stepIndex + 1} de ${AUDIT_DATA.STEPS.length} · ${progress}%</p>
       ${stepIndex === 0 && !AUDIT_SYNC_CORE.hasCollectedAnswers(audit)
-        ? '<p class="audit-note">Este é um rascunho já registrado. Ainda não há respostas de coleta salvas; a data e a hora foram preenchidas automaticamente. Nenhuma nova auditoria foi criada ao continuar.</p>'
+        ? '<p class="audit-note">Ainda não há respostas de coleta neste rascunho. A data e a hora podem ter sido preenchidas automaticamente. Se você já preencheu dados em outra ocasião, consulte o histórico antes de continuar.</p>'
         : ''}
       <form id="auditForm" class="audit-form">${stepMarkup(step.id)}${sectionChecklist}</form>
       <nav class="audit-nav">
