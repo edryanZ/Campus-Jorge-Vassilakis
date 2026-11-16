@@ -101,6 +101,22 @@ test('rascunho local com sincronização pendente não é substituído', async (
   assert.equal(result.saved, false);
   assert.equal(writes.length, 0);
 });
+test('confirmação remota sem respostas preserva os campos locais e sinaliza conflito', async () => {
+  const source = read('audit-storage.js');
+  const start = source.indexOf('async function saveRemoteAcknowledgment(record, sentMutationId)');
+  const end = source.indexOf('\n  // Uma consulta remota', start);
+  assert.ok(start >= 0 && end > start, 'confirmação atômica encontrada');
+  const fake = makeStore({ ...filled, mutationId: 'MUTACAO-TESTE' });
+  const factory = new Function('AUDIT_SYNC_CORE', 'structuredClone', 'openDatabase', 'normalizeAudit', 'STORES',
+    source.slice(start, end) + '; return saveRemoteAcknowledgment;');
+  const acknowledge = factory(core, structuredClone, async () => fake.db, structuredClone, { AUDITS: 'audits' });
+  const remote = { ...empty, mutationId: 'MUTACAO-TESTE', serverRevision: 5 };
+  const result = await acknowledge(remote, 'MUTACAO-TESTE');
+  assert.equal(result.superseded, true);
+  assert.equal(result.audit.syncState, 'CONFLICT');
+  assert.equal(fake.getStored().data.identification.inspector, filled.data.identification.inspector);
+});
+
 test('fluxo de retomada avisa e preserva conflitos', () => {
   const app = read('audit-app.js');
   const remote = read('audit-remote.js');
