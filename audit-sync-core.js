@@ -94,8 +94,36 @@ const AUDIT_SYNC_CORE = (() => {
       }));
   }
 
+  // Somente a igualdade das respostas, etapa e situação comprova a
+  // sincronização. Datas de envio e revisão remota não entram na comparação.
+  function collectedPayload(record = {}) {
+    return {
+      status: record.status || null,
+      currentStep: Number(record.currentStep || 0),
+      data: record.data || {},
+      reviewedSteps: record.reviewedSteps || {},
+      nonConformities: record.nonConformities || [],
+      evidenceIds: record.evidenceIds || []
+    };
+  }
+
+  function canonicalJson(value) {
+    if (Array.isArray(value)) return '[' + value.map(canonicalJson).join(',') + ']';
+    if (value && typeof value === 'object')
+      return '{' + Object.keys(value).sort()
+        .filter(key => value[key] !== undefined)
+        .map(key => JSON.stringify(key) + ':' + canonicalJson(value[key])).join(',') + '}';
+    return JSON.stringify(value);
+  }
+
+  function hasSameCollectedPayload(first, second) {
+    if (!first || !second || first.auditId !== second.auditId ||
+        first.environmentId !== second.environmentId) return false;
+    return canonicalJson(collectedPayload(first)) === canonicalJson(collectedPayload(second));
+  }
+
   return Object.freeze({
-    hasCollectedAnswers, aggregateState, evidenceSummary, publicPayload, storagePath, pendingStates,
+    hasSameCollectedPayload, hasCollectedAnswers, aggregateState, evidenceSummary, publicPayload, storagePath, pendingStates,
     isRecoveryAudit, isActiveAudit, ownerKey, activeKey, isActiveUniqueViolation, conflictId
   });
 })();
