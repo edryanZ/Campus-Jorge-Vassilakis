@@ -122,8 +122,28 @@ const AUDIT_SYNC_CORE = (() => {
     return canonicalJson(collectedPayload(first)) === canonicalJson(collectedPayload(second));
   }
 
+  // Detecta diminuição involuntária de dados: uma resposta anteriormente
+  // preenchida que some, ou redução de fotografias/não conformidades.
+  // Correções intencionais continuam possíveis, mas a versão anterior
+  // será arquivada antes da gravação, dentro da mesma transação.
+  function hasRemovedAnswers(previous = {}, next = {}) {
+    const meaningful = value => value !== undefined && value !== null &&
+      (typeof value === 'string' ? value.trim() !== '' :
+        Array.isArray(value) ? value.length > 0 :
+        typeof value === 'object' ? Object.keys(value).length > 0 : true);
+    for (const [section, fields] of Object.entries(previous.data || {})) {
+      if (!fields || typeof fields !== 'object') continue;
+      for (const [key, oldValue] of Object.entries(fields)) {
+        if (section === 'identification' && (key === 'date' || key === 'startTime')) continue;
+        if (meaningful(oldValue) && !meaningful(next.data?.[section]?.[key])) return true;
+      }
+    }
+    return (previous.nonConformities || []).length > (next.nonConformities || []).length ||
+      (previous.evidenceIds || []).length > (next.evidenceIds || []).length;
+  }
+
   return Object.freeze({
-    hasSameCollectedPayload, hasCollectedAnswers, aggregateState, evidenceSummary, publicPayload, storagePath, pendingStates,
+    hasRemovedAnswers, hasSameCollectedPayload, hasCollectedAnswers, aggregateState, evidenceSummary, publicPayload, storagePath, pendingStates,
     isRecoveryAudit, isActiveAudit, ownerKey, activeKey, isActiveUniqueViolation, conflictId
   });
 })();
