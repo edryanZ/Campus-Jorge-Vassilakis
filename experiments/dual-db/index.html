@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Ensaio de dois bancos · Campus JV</title>
+  <style>
+    :root { font-family: system-ui, sans-serif; color: #18314a; background: #edf3f9; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    main { max-width: 850px; margin: 0 auto; padding: 20px 14px 50px; }
+    h1 { font-size: clamp(1.35rem, 3vw, 1.8rem); margin: 0 0 8px; }
+    h2 { font-size: 1.13rem; margin: 0; }
+    p { line-height: 1.55; }
+    header p { margin: 4px 0 18px; }
+    .panel { background: #fff; border: 1px solid #cedce9; border-radius: 16px;
+             padding: 18px; margin: 15px 0; box-shadow: 0 6px 20px #18314a0b; }
+    .subtitle { color: #4c6277; font-size: .92rem; }
+    .hint { border-left: 3px solid #d28c38; padding-left: 12px; }
+    label { display: block; font-size: .92rem; font-weight: 650; margin: 12px 0 4px; }
+    label.confirm { display: flex; align-items: flex-start; gap: 10px; font-weight: 500; }
+    input:not([type="checkbox"]),textarea,button { width: 100%; font: inherit; border-radius: 10px; min-height: 44px; }
+    input:not([type="checkbox"]),textarea { border: 1px solid #a8bacc; color: #152a40;
+      padding: 10px 12px; background: #fff; }
+    textarea { min-height: 112px; resize: vertical; font-family: ui-monospace, monospace; font-size: .86rem; }
+    button { color: #fff; background: #174e7d; border: 0; padding: 10px 16px;
+      font-weight: 700; cursor: pointer; margin-top: 12px; }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    button:focus-visible,input:focus-visible,textarea:focus-visible { outline: 3px solid #007bbb; outline-offset: 2px; }
+    .status { padding: 10px 12px; border-radius: 9px; background: #eef4fa;
+      color: #244f70; font-size: .9rem; overflow-wrap: anywhere; }
+    .results { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
+    .result { border: 1px solid #d5e1ea; border-radius: 12px; padding: 12px; }
+    .result strong { display: block; margin: 5px 0; }
+    .result span { display: block; color: #52677a; font-size: .86rem; }
+    .result[data-outcome="VERIFIED"] { border-color: #408861; }
+    .result[data-outcome="MISMATCH"],.result[data-outcome="ERROR"] { border-color: #b84b42; }
+    .log { max-height: 230px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere;
+      font-size: .82rem; background: #f5f8fb; border-radius: 9px; padding: 12px; }
+    @media (max-width: 540px) { .results { grid-template-columns: 1fr; } main { padding: 14px 10px; } }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Supabase + Firebase, juntos</h1>
+    <p>Teste independente do Campus Jorge Vassilakis. Envia <strong>a mesma amostra fictícia</strong>
+      simultaneamente aos dois bancos, relê os dados diretamente do servidor e compara os campos.</p>
+  </header>
+  <section class="panel" aria-label="Segurança do experimento">
+    <h2>Proteção dos seus dados</h2>
+    <p class="hint">Este teste <strong>não abre, altera ou sincroniza auditorias reais</strong>.
+      Ele só usa a tabela e a coleção <code>dual_db_trial_records</code>, separadas do sistema.
+      Não clique em testar até que as regras de acesso dos dois serviços tenham sido configuradas.</p>
+    <p class="subtitle">Os logins são feitos diretamente com Supabase Auth e Firebase Auth.
+      Não envie sua senha ou as credenciais desta tela pelo chat. O teste não usa credenciais administrativas.</p>
+  </section>
+  <section class="panel">
+    <h2>1. Supabase atual</h2>
+    <p class="subtitle">Usa o endereço público do Supabase configurado no Campus JV.
+      Conta de auditor autorizada; não modifica seu perfil administrativo.</p>
+    <form id="supabaseLogin">
+      <label for="supaEmail">E-mail</label>
+      <input id="supaEmail" type="email" autocomplete="username" required>
+      <label for="supaPassword">Senha</label>
+      <input id="supaPassword" type="password" autocomplete="current-password" required>
+      <button type="submit">Entrar no Supabase para o teste</button>
+    </form>
+    <p id="supaState" class="status" role="status">Não conectado</p>
+  </section>
+  <section class="panel">
+    <h2>2. Firebase de testes</h2>
+    <p class="subtitle">Configure um projeto Firebase separado, com Authentication (E-mail/senha)
+      e Firestore. Cole <em>somente</em> a configuração pública do aplicativo Web:
+      <code>apiKey</code>, <code>authDomain</code>, <code>projectId</code> e <code>appId</code>.</p>
+    <form id="firebaseLogin">
+      <label for="firebaseConfig">Configuração pública Firebase (JSON)</label>
+      <textarea id="firebaseConfig" spellcheck="false" placeholder='{"apiKey":"...","authDomain":"...","projectId":"...","appId":"..."}' required></textarea>
+      <label for="fbEmail">E-mail Firebase</label>
+      <input id="fbEmail" type="email" autocomplete="username" required>
+      <label for="fbPassword">Senha Firebase</label>
+      <input id="fbPassword" type="password" autocomplete="current-password" required>
+      <button type="submit">Entrar no Firebase de testes</button>
+    </form>
+    <p id="firebaseState" class="status" role="status">Não conectado</p>
+  </section>
+  <section class="panel">
+    <h2>3. Testar gravação simultânea</h2>
+    <p class="subtitle">O botão envia apenas a amostra fixa “DADO FICTÍCIO PARA TESTE”.
+      Não use registros de campo, dados pessoais, documentos ou fotos reais.</p>
+    <label class="confirm" for="confirmScope">
+      <input id="confirmScope" type="checkbox">
+      Confirmo que este é um teste com bancos e regras isoladas, sem auditorias reais.
+    </label>
+    <button id="testBoth" type="button" disabled>Testar os dois bancos juntos</button>
+    <p id="testState" class="status" role="status" aria-live="polite">Conecte os dois bancos primeiro.</p>
+    <div class="results" aria-label="Resultados individuais">
+      <div id="supaResult" class="result"><h2>Supabase</h2><strong>—</strong><span>Sem teste</span></div>
+      <div id="firebaseResult" class="result"><h2>Firebase</h2><strong>—</strong><span>Sem teste</span></div>
+    </div>
+    <p class="subtitle">A amostra é gravada nos dois serviços ao mesmo tempo. Sucesso em um não
+      oculta falha no outro; só declaramos sucesso duplo com as duas respostas idênticas.</p>
+  </section>
+</main>
+<script src="../../supabase-config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3/dist/umd/supabase.min.js" crossorigin="anonymous"></script>
+<script src="./compare.js"></script>
+<script type="module" src="./live-test.mjs"></script>
+</body>
+</html>
