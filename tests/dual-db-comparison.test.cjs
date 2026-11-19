@@ -95,7 +95,7 @@ test('Firestore escreve apenas na coleção de testes associada ao UID', async (
       assert.equal(value.ownerUid, 'FAKE-TEST-USER');
       memory.set(path, structuredClone(value));
     },
-    async getDoc(path) {
+    async getDocFromServer(path) {
       return { exists: () => memory.has(path), data: () => memory.get(path) };
     }
   });
@@ -103,4 +103,16 @@ test('Firestore escreve apenas na coleção de testes associada ao UID', async (
   assert.equal((await adapter.read('CJV-TEST-FIRE')).testOnly, true);
   auth.currentUser = { uid: 'DIFFERENT-USER' };
   await assert.rejects(adapter.read('CJV-TEST-FIRE'), /Conta Firebase alterada/);
+});
+
+test('não aceita leitura de cache do Firebase como confirmação do servidor', () => {
+  const auth = { currentUser: { uid: 'FAKE-USER' } };
+  assert.throws(() => firebaseAdapter({
+    db: {}, auth, doc() {}, setDoc() {}, getDoc() {}
+  }), /Firestore apenas no projeto de testes/);
+});
+
+test('rejeita campos extras mesmo com marcador de teste', () => {
+  const unsafe = { ...makeFixture(), data: { ...makeFixture().data, notes: 'PESSOA DE VERDADE' } };
+  assert.throws(() => validateFixture('CJV-TEST-EXTRA-01', unsafe), /Somente auditorias/);
 });
