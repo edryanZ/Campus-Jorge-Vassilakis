@@ -11,6 +11,23 @@ Este diretório não é importado por `index.html`, `audit-app.js` ou `audit-rem
 - Rodar localmente com Node: `node --test tests/dual-db-comparison.test.cjs`.
 - Dados simulados não demonstram disponibilidade real do Supabase nem do Firebase.
 
+## Testar os dois ao mesmo tempo na página isolada
+
+Foi adicionada a página `experiments/dual-db/index.html` e o controlador `live-test.mjs`.
+**Somente depois de configurar os dois provedores**, ela permite um teste real de escrita/leitura simultânea.
+
+1. Conectar/criar **Firebase de testes** e habilitar Firebase Authentication (E-mail/senha), usuário de teste com e-mail verificado e Firestore.
+2. Revisar e aplicar apenas no projeto Firebase de testes as regras `firestore-rules.REVIEW-ONLY.fragment`, integrando-as às regras existentes. Testar bloqueio de usuários diferentes.
+3. Revisar o script `supabase-table.REVIEW-ONLY.sql` com o responsável pelo Supabase atual. A tabela `dual_db_trial_records` é **nova e isolada**, com RLS por usuário; não execute o SQL sem aprovar a alteração e validar segurança. Nenhuma tabela de auditoria real precisa mudar.
+4. Hospedar/abrir a **prévia da branch**, no caminho `/experiments/dual-db/`. Não vincular ao menu principal, não adicionar à PWA ou à `main`.
+5. Entrar com conta autorizada no Supabase e com conta verificada no Firebase de testes; colar só a configuração Web **pública** do Firebase (não colar chave de servidor nem compartilhar senhas).
+6. Confirmar que são bancos de teste e tocar **Testar os dois bancos juntos**. Os dois escrevem o mesmo registro fictício em paralelo e relêem do servidor. O módulo de Firestore exige `getDocFromServer`, que não aceita o cache local como confirmação.
+7. A tela mostra `VERIFIED`, `MISMATCH` ou `ERROR` para cada serviço; somente declara sucesso quando os dois devolvem as respostas completas. Uma falha não impede obter o resultado do outro.
+
+Notas de segurança: o login Supabase desta tela usa sessão de memória (não substitui o login do site). O Firebase usa persistência de sessão do navegador, não token de servidor. As duas contas são independentes. O teste não consulta `audits`, não abre rascunhos, não envia fotos e não roda no site oficial. O documento de teste usa ID fixo por conta para não criar vários registros.
+
+O código usa os SDKs Firebase v13.3.0 via CDN e Supabase v2.117.3, ambos fixados, conforme as orientações oficiais sobre o uso modular do SDK no navegador.
+
 ## Fase 2 — teste real, ainda NÃO executado
 1. Instalar/conectar o plugin Firebase ou criar um **projeto Firebase exclusivo de testes**, habilitando Firestore e autenticação de uma conta verificada. Não habilitar Blaze/serviços pagos sem aprovação.
 2. Revisar `firestore-rules.REVIEW-ONLY.fragment`. É apenas **um fragmento**: unir às regras existentes do projeto de testes, sem substituir regras globais. Conferir negação para anônimo e usuários diferentes.
