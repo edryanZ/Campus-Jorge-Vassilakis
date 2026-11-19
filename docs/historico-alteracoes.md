@@ -1,5 +1,14 @@
 # Histórico de alterações
 
+## 19/11/2026 — Tela isolada de gravação simultânea Supabase + Firestore
+
+- Foram acrescentados `experiments/dual-db/index.html` e `live-test.mjs` para testar, **somente com dados fictícios**, gravação e leitura de uma mesma amostra nos dois bancos, disparadas em paralelo.
+- A tela usa autenticações independentes: Supabase Auth em memória e Firebase Auth com sessão de navegador e e-mail verificado. O usuário confirma o escopo de teste antes de habilitar o botão.
+- O adaptador Firebase exige `getDocFromServer` para não considerar um resultado do cache como prova de persistência remota. A amostra é rigidamente fixa em `DADO FICTÍCIO PARA TESTE`; o ID é estável por conta, para evitar crescimento de registros.
+- Acrescentados testes estruturais e de segurança em `tests/dual-db-live-ui.test.cjs`. Total **14/14 cenários** aprovados nas duas suítes do experimento em simulação; **nenhum teste de integração real foi executado**, pois o projeto Firebase não está conectado e a tabela `dual_db_trial_records` ainda não existe no Supabase.
+- A Vercel registrou deploy de preview para a branch; acesso à URL do preview não foi confirmado externamente. `main`, configurações de produção, banco existente, dados reais, contas e fotos não foram alterados.
+
+
 ## 19/11/2026 — Experimento isolado: Supabase atual + Firebase
 
 - Decisão revisada: **não substituir Supabase imediatamente**. Comparar seu banco atual com Firestore de testes, apenas com registros `DADO FICTÍCIO PARA TESTE`, sem envio duplo de auditorias reais.
