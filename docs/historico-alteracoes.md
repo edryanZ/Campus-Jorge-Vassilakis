@@ -1,5 +1,14 @@
 # Histórico de alterações
 
+## 19/11/2026 — Experimento isolado: Supabase atual + Firebase
+
+- Decisão revisada: **não substituir Supabase imediatamente**. Comparar seu banco atual com Firestore de testes, apenas com registros `DADO FICTÍCIO PARA TESTE`, sem envio duplo de auditorias reais.
+- Implementados `experiments/dual-db/compare.js`, `tests/dual-db-comparison.test.cjs`, SQL de revisão para tabela Supabase isolada, fragmento de regras Firestore e instruções em `experiments/dual-db/README.md`.
+- 6/6 testes simulados passaram, incluindo igualdade de payload, divergências, erro de um serviço, barreiras para IDs reais, limitação de tabelas/coleções e troca de usuário no Firebase.
+- A integração **não** é importada pelo site oficial. Nenhuma migração, tabela, regra, projeto pago, credencial, dado de usuário, foto ou registro real foi modificado. Comparação real depende de Firebase conectado e de ambiente de testes previamente aprovado.
+- Mantida a base de trabalho sobre a branch de proteção de salvamento v16.5.6; **main não foi alterada**. Cloudflare R2 fica para uma possível fase posterior de backup.
+
+
 ## v16.5.6 — Confirmação verificável do salvamento e sincronização (16/11/2026)
 
 **Diagnóstico:** o formulário permitia avançar sem aguardar a conclusão do salvamento local. A resposta de `sync_audit`, `sync_shared_audit` e `finalize_audit_sync` não era comparada aos campos e etapa enviados. Uma resposta HTTP bem-sucedida, por si só, não prova a integridade das respostas coletadas. Não foi possível determinar retroativamente a causa exata das respostas ausentes da Sala 2.
