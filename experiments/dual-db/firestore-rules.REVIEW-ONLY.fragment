@@ -1,0 +1,24 @@
+// FRAGMENTO de regras para um PROJETO FIREBASE DE TESTES.
+// NÃO substituir automaticamente as regras de um projeto existente.
+// Adicionar dentro de "match /databases/{database}/documents {...}".
+match /dual_db_trial_records/{trialId} {
+  function signedInAndVerified() {
+    return request.auth != null && request.auth.token.email_verified == true;
+  }
+  function validTestWrite() {
+    return trialId.matches('^CJV-TEST-[A-Za-z0-9-]{1,70}$')
+      && request.resource.data.keys().hasOnly(['ownerUid', 'payload'])
+      && request.resource.data.ownerUid == request.auth.uid
+      && request.resource.data.payload is map
+      && request.resource.data.payload.testOnly == true
+      && request.resource.data.payload.environmentId == 'DADO FICTÍCIO PARA TESTE'
+      && request.resource.data.payload.inspector == 'DADO FICTÍCIO PARA TESTE';
+  }
+  allow get: if signedInAndVerified() && resource.data.ownerUid == request.auth.uid;
+  allow list: if false;
+  allow create: if signedInAndVerified() && validTestWrite();
+  allow update: if signedInAndVerified()
+    && resource.data.ownerUid == request.auth.uid
+    && validTestWrite();
+  allow delete: if false;
+}
