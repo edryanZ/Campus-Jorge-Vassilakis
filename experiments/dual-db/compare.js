@@ -28,6 +28,10 @@
       throw new Error('Somente auditorias identificadas como DADO FICTÍCIO PARA TESTE são permitidas.');
     if (!sample.data || typeof sample.data !== 'object' || Array.isArray(sample.data))
       throw new Error('A amostra fictícia precisa conter um formulário de dados.');
+    // Exigir a amostra fixa, impedindo inclusão acidental de respostas
+    // reais mesmo que alguém marque testOnly=true no navegador.
+    if (canonical(sample) !== canonical(makeFixture()))
+      throw new Error('Somente auditorias com a amostra fixa DADO FICTÍCIO PARA TESTE são permitidas.');
     if (canonical(sample).length > 20000)
       throw new Error('A amostra fictícia excedeu o limite de segurança do experimento.');
   }
@@ -110,8 +114,8 @@
     };
   }
 
-  function firebaseAdapter({ db, auth, doc, setDoc, getDoc }) {
-    if (!db || !auth?.currentUser?.uid || !doc || !setDoc || !getDoc)
+  function firebaseAdapter({ db, auth, doc, setDoc, getDocFromServer }) {
+    if (!db || !auth?.currentUser?.uid || !doc || !setDoc || !getDocFromServer)
       throw new Error('Ative Firebase Auth e Firestore apenas no projeto de testes.');
     const ownerUid = auth.currentUser.uid;
     const collection = 'dual_db_trial_records';
@@ -124,7 +128,8 @@
       async read(id) {
         if (!id.startsWith(PREFIX)) throw new Error('Leitura fora da área de testes proibida.');
         if (auth.currentUser?.uid !== ownerUid) throw new Error('Conta Firebase alterada.');
-        const snap = await getDoc(doc(db, collection, id));
+        // Leituras exclusivamente do servidor: não aceitar cache local como comprovação.
+        const snap = await getDocFromServer(doc(db, collection, id));
         return snap.exists() ? snap.data().payload : null;
       }
     };
