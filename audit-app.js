@@ -1128,6 +1128,9 @@ const AUDIT_APP = (() => {
   const refreshParticipation = document.getElementById('refreshParticipationRequests');
   let currentAccess = null;
   let authGeneration = 0;
+  let accessRecoveryNeeded = false;
+  let accessRecoveryInFlight = false;
+  let lastAccessRecoveryAttempt = 0;
 
   async function loadAccessRequests() {
     if (!currentAccess?.admin || currentAccess.offline) return;
@@ -1276,6 +1279,7 @@ const AUDIT_APP = (() => {
     adminStatus.textContent = '';
     participationStatus.textContent = '';
     if (!authenticated) {
+      accessRecoveryNeeded = false;
       window.dispatchEvent(new CustomEvent('audit:access-updated', { detail: { authorized: false } }));
       authStatus.className = AUDIT_REMOTE.configured ? 'auth-status' : 'auth-status is-error';
       authStatus.textContent = message || (AUDIT_REMOTE.configured
@@ -1289,6 +1293,9 @@ const AUDIT_APP = (() => {
       const access = await AUDIT_REMOTE.getAccess({ forceRefresh });
       if (generation !== authGeneration) return;
       currentAccess = access;
+      // Se o banco estava pausado, revalidar quando a aba voltar a ficar ativa.
+      // Não tentar novamente em loop para uma conta realmente não aprovada.
+      accessRecoveryNeeded = !access || Boolean(access.offline);
       window.dispatchEvent(new CustomEvent('audit:access-updated', { detail: { authorized: Boolean(access?.canAudit) } }));
       if (access?.canAudit) {
         exportBackupButton.hidden = false;
@@ -1310,11 +1317,36 @@ const AUDIT_APP = (() => {
       }
     } catch (error) {
       if (generation !== authGeneration) return;
+      accessRecoveryNeeded = true;
       window.dispatchEvent(new CustomEvent('audit:access-updated', { detail: { authorized: false } }));
       authStatus.className = 'auth-status is-error';
       authStatus.textContent = `Falha ao verificar autorização: ${error.message || error}`;
     }
   }
+
+  // O navegador pode continuar online enquanto o projeto Supabase está pausado.
+  // Quando o projeto reativa não há evento 'online': renovar autorização ao voltar
+  // à aba, somente para falha temporária e sem repetir consultas constantemente.
+  async function recoverTemporaryAccess() {
+    if (!accessRecoveryNeeded || accessRecoveryInFlight || !navigator.onLine ||
+        !currentSessionUserId || Date.now() - lastAccessRecoveryAttempt < 15000) return;
+    accessRecoveryInFlight = true;
+    lastAccessRecoveryAttempt = Date.now();
+    const expectedUserId = currentSessionUserId;
+    try {
+      const user = await AUDIT_REMOTE.sessionUser();
+      if (user?.id !== expectedUserId || currentSessionUserId !== expectedUserId) return;
+      await setAuthState(user, '', { forceRefresh: true });
+    } catch (error) {
+      console.warn('[AuditAuth] Revalidação temporária indisponível:', error);
+    } finally {
+      accessRecoveryInFlight = false;
+    }
+  }
+  window.addEventListener('focus', recoverTemporaryAccess);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') recoverTemporaryAccess();
+  });
 
   function openAuthModal() {
     authModal.hidden = false;
