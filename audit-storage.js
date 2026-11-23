@@ -150,11 +150,11 @@ const AUDIT_STORAGE = (() => {
       read.onerror = () => { failure = read.error; tx.abort(); };
       read.onsuccess = () => {
         const current = read.result;
-        // Uma confirmação do servidor sem respostas nunca pode apagar
+        // Uma confirmação do servidor com respostas incompletas nunca pode apagar
         // respostas já armazenadas no navegador, mesmo se o ID de mutação
         // for o mesmo. Sinalizar divergência para análise manual.
-        const missingAnswers = Boolean(current && AUDIT_SYNC_CORE.hasCollectedAnswers(current) &&
-          !AUDIT_SYNC_CORE.hasCollectedAnswers(remote));
+        const missingAnswers = Boolean(current &&
+          AUDIT_SYNC_CORE.hasMissingCollectedAnswers(current, remote));
         superseded = Boolean(current && current.mutationId !== sentMutationId) || missingAnswers;
         result = superseded ? {
           ...current,
@@ -196,8 +196,7 @@ const AUDIT_STORAGE = (() => {
         // Nunca deixar um snapshot remoto sem respostas substituir a coleta
         // preenchida e ainda existente neste dispositivo, mesmo quando a
         // versão local foi marcada SYNCED por um cliente anterior.
-        if (current && AUDIT_SYNC_CORE.hasCollectedAnswers(current) &&
-            !AUDIT_SYNC_CORE.hasCollectedAnswers(remote)) {
+        if (current && AUDIT_SYNC_CORE.hasMissingCollectedAnswers(current, remote)) {
           protectedLocal = true;
           return;
         }
