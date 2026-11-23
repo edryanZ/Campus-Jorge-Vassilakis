@@ -134,3 +134,24 @@ Relatório complementar: `docs/revisao-sincronizacao-v16-2-2026-10-28.md`.
 - As auditorias reais no banco do campus não foram modificadas nesta rodada. As Salas 2 e 16 permaneciam na revisão 3, com apenas identificação sincronizada, na última verificação. Qualquer dado posterior deve ser conferido no dispositivo original.
 - Acesso privado ao domínio de produção exige configuração de Deployment Protection na Vercel; renomear o domínio, isoladamente, não restringe o público.
 - Validação com browser real, dispositivo e conta autorizada é exigida antes de considerar a recuperação dos dados concluída.
+
+## 23/11/2026 — Proteção contra retorno remoto parcialmente preenchido (branch isolada)
+
+- A confirmação remota e a recuperação de rascunhos agora conferem campos coletados individualmente, revisões de etapas, IDs de fotografias e de não conformidades.
+- Quando a versão remota deixa de conter informações presentes na cópia local, a cópia local é preservada e a divergência é sinalizada para conferência, mesmo se o servidor contiver outras respostas.
+- Mudança restrita ao cliente: não altera o mapa, não executa migrações, não remove registros e não modifica a branch main ou a produção.
+- Validação: verificações de sintaxe e cenários da comparação executados em V8; testes completos em Node e testes reais de usuário e servidor ainda precisam ser executados antes de publicar.
+
+## 23/11/2026 — Recuperação da autorização após pausa do banco (branch isolada)
+
+- Confirmado no Supabase: ADMIN e AUDITOR possuem perfis ativos, aprovados, com e-mail confirmado e usuários Auth correspondentes. O banco foi reativado e encontra-se ACTIVE_HEALTHY.
+- Revisão somente leitura das RLS: ADMIN consegue consultar auditorias autorizadas; AUDITOR mantém acesso limitado ao proprietário (colaboração por RPC específica). As RPCs administrativas validam ADMIN no servidor.
+- Ajustado em branch separada: quando o banco falhar e voltar, revalidar acesso ao retornar à aba/ao foco, com limite de 15 segundos, sem trocar conta ou depender de evento de desconexão da internet.
+- Nenhuma mudança de SQL, perfil, auditoria, main ou publicação. Login real com senha e fluxo de aprovação por navegador ainda exigem validação autenticada.
+
+## 23/11/2026 — Integração da versão v16.5.5 na main
+
+- Integra duas correções independentes: proteção de respostas de coleta contra retorno remoto parcial e recuperação de autorização após indisponibilidade do Supabase.
+- Atualizada a versão de cache da PWA para distribuir os novos módulos a dispositivos que já utilizaram o aplicativo.
+- Sem migrações SQL, sem alterações em auditorias, fotos, mapa, IDs, permissões ou GitHub Actions.
+- Os testes simulados não substituem a validação autenticada ponta a ponta e em aparelhos reais.

@@ -94,8 +94,38 @@ const AUDIT_SYNC_CORE = (() => {
       }));
   }
 
+  // Comparação conservadora: a existência de ALGUMA resposta no servidor não
+  // garante que ele recebeu TODAS as respostas, revisões ou evidências locais.
+  // Divergências devem ser analisadas, nunca apagadas automaticamente.
+  function hasMissingCollectedAnswers(local = {}, remote = {}) {
+    const collected = value => {
+      if (value === undefined || value === null || value === '') return false;
+      if (typeof value === 'string') return value.trim().length > 0;
+      if (Array.isArray(value)) return value.length > 0;
+      if (typeof value === 'object') return Object.keys(value).length > 0;
+      return true; // Zero e false também podem ser respostas válidas.
+    };
+    for (const [section, fields] of Object.entries(local.data || {})) {
+      if (!fields || typeof fields !== 'object') continue;
+      for (const [field, value] of Object.entries(fields)) {
+        if (section === 'identification' && (field === 'date' || field === 'startTime')) continue;
+        if (collected(value) && !collected(remote.data?.[section]?.[field])) return true;
+      }
+    }
+    if (Object.entries(local.reviewedSteps || {}).some(([step, reviewed]) =>
+      reviewed === true && remote.reviewedSteps?.[step] !== true)) return true;
+    if ((local.evidenceIds || []).some(id => !Array.isArray(remote.evidenceIds) ||
+      !remote.evidenceIds.includes(id))) return true;
+    if ((local.nonConformities || []).some(item =>
+      !Array.isArray(remote.nonConformities) ||
+      !remote.nonConformities.some(other =>
+        (item?.nonConformityId && other?.nonConformityId === item.nonConformityId) ||
+        JSON.stringify(other) === JSON.stringify(item)))) return true;
+    return false;
+  }
+
   return Object.freeze({
-    hasCollectedAnswers, aggregateState, evidenceSummary, publicPayload, storagePath, pendingStates,
+    hasCollectedAnswers, hasMissingCollectedAnswers, aggregateState, evidenceSummary, publicPayload, storagePath, pendingStates,
     isRecoveryAudit, isActiveAudit, ownerKey, activeKey, isActiveUniqueViolation, conflictId
   });
 })();
