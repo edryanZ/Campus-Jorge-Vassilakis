@@ -134,3 +134,10 @@ Relatório complementar: `docs/revisao-sincronizacao-v16-2-2026-10-28.md`.
 - As auditorias reais no banco do campus não foram modificadas nesta rodada. As Salas 2 e 16 permaneciam na revisão 3, com apenas identificação sincronizada, na última verificação. Qualquer dado posterior deve ser conferido no dispositivo original.
 - Acesso privado ao domínio de produção exige configuração de Deployment Protection na Vercel; renomear o domínio, isoladamente, não restringe o público.
 - Validação com browser real, dispositivo e conta autorizada é exigida antes de considerar a recuperação dos dados concluída.
+
+## 23/11/2026 — Recuperação da autorização após pausa do banco (branch isolada)
+
+- Confirmado no Supabase: ADMIN e AUDITOR possuem perfis ativos, aprovados, com e-mail confirmado e usuários Auth correspondentes. O banco foi reativado e encontra-se ACTIVE_HEALTHY.
+- Revisão somente leitura das RLS: ADMIN consegue consultar auditorias autorizadas; AUDITOR mantém acesso limitado ao proprietário (colaboração por RPC específica). As RPCs administrativas validam ADMIN no servidor.
+- Ajustado em branch separada: quando o banco falhar e voltar, revalidar acesso ao retornar à aba/ao foco, com limite de 15 segundos, sem trocar conta ou depender de evento de desconexão da internet.
+- Nenhuma mudança de SQL, perfil, auditoria, main ou publicação. Login real com senha e fluxo de aprovação por navegador ainda exigem validação autenticada.
