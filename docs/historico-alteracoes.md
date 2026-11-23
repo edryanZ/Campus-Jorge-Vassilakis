@@ -134,3 +134,10 @@ Relatório complementar: `docs/revisao-sincronizacao-v16-2-2026-10-28.md`.
 - As auditorias reais no banco do campus não foram modificadas nesta rodada. As Salas 2 e 16 permaneciam na revisão 3, com apenas identificação sincronizada, na última verificação. Qualquer dado posterior deve ser conferido no dispositivo original.
 - Acesso privado ao domínio de produção exige configuração de Deployment Protection na Vercel; renomear o domínio, isoladamente, não restringe o público.
 - Validação com browser real, dispositivo e conta autorizada é exigida antes de considerar a recuperação dos dados concluída.
+
+## 23/11/2026 — Proteção contra retorno remoto parcialmente preenchido (branch isolada)
+
+- A confirmação remota e a recuperação de rascunhos agora conferem campos coletados individualmente, revisões de etapas, IDs de fotografias e de não conformidades.
+- Quando a versão remota deixa de conter informações presentes na cópia local, a cópia local é preservada e a divergência é sinalizada para conferência, mesmo se o servidor contiver outras respostas.
+- Mudança restrita ao cliente: não altera o mapa, não executa migrações, não remove registros e não modifica a branch main ou a produção.
+- Validação: verificações de sintaxe e cenários da comparação executados em V8; testes completos em Node e testes reais de usuário e servidor ainda precisam ser executados antes de publicar.
