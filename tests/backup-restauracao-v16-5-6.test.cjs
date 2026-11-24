@@ -307,3 +307,48 @@ test('caminho de foto não pode ser trocado por caminho de outra evidência', as
   await assert.rejects(f.context.AUDIT_RESTORE.inspect(archive), /vinculado ao ID incorreto/);
   assert.equal(f.stores.audits.length, 0);
 });
+
+test('edição local durante abertura do IndexedDB é preservada pela transação', async () => {
+  const f = fixture();
+  const previous = clone(f.manifest.audits[0]);
+  f.stores.audits.push(previous);
+  const open = f.context.AUDIT_STORAGE.openDatabase;
+  f.context.AUDIT_STORAGE.openDatabase = async () => {
+    f.stores.audits[0].data.identification.inspector =
+      'DADO FICTÍCIO PARA TESTE ALTERADO DURANTE RESTAURAÇÃO';
+    return open();
+  };
+  const result = await f.context.AUDIT_RESTORE.restore(await f.zip());
+  assert.equal(result.photos, 1);
+  assert.equal(f.stores.audits[0].data.identification.inspector,
+    'DADO FICTÍCIO PARA TESTE ALTERADO DURANTE RESTAURAÇÃO');
+  assert.equal(f.stores.audits[0].restoreReviewRequired, true);
+  assert.equal(f.stores.audits[0].syncState, 'CONFLICT');
+});
+
+test('conflito já existente conserva sua explicação ao recuperar fotografia', async () => {
+  const f = fixture();
+  const existing = clone(f.manifest.audits[0]);
+  existing.syncState = 'CONFLICT';
+  existing.syncError = 'DADO FICTÍCIO PARA TESTE: conflito anterior';
+  f.stores.audits.push(existing);
+  await f.context.AUDIT_RESTORE.restore(await f.zip());
+  assert.equal(f.stores.audits[0].syncError, existing.syncError);
+  assert.equal(f.stores.audits[0].restoreReviewRequired, true);
+});
+
+test('metadados sem bytes não colocam auditoria existente em conflito', async () => {
+  const f = fixture();
+  const original = clone(f.manifest.audits[0]);
+  original.syncState = 'SYNCED';
+  f.stores.audits.push(original);
+  const manifest = clone(f.manifest);
+  manifest.evidence[0].hasLocalPhoto = false;
+  delete manifest.evidence[0].archivePath;
+  const result = await f.context.AUDIT_RESTORE.restore(await f.zip(manifest, []));
+  assert.equal(result.imported, 0);
+  assert.equal(result.photos, 0);
+  assert.equal(f.stores.evidence.length, 0);
+  assert.equal(f.stores.audits[0].syncState, 'SYNCED');
+  assert.equal(f.stores.audits[0].restoreReviewRequired, undefined);
+});
