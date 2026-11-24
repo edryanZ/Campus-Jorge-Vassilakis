@@ -295,8 +295,10 @@ const AUDIT_RESTORE = (() => {
       const missing = preview.missingPhotos
         ? '\nAtenção: ' + preview.missingPhotos + ' fotografia(s) não estão presentes no backup.' : '';
       if (!window.confirm('Backup válido: ' + preview.audits + ' auditoria(s), ' +
-          preview.photos + ' fotografia(s).\n\nImportar apenas registros que ainda não existem neste dispositivo?' +
-          '\nNão substitui arquivos atuais nem sincroniza automaticamente.' + missing)) {
+          preview.photos + ' fotografia(s).\n\nRecuperar auditorias e fotografias ausentes?' +
+          '\nDados e arquivos existentes não serão sobrescritos.' +
+          '\nSe uma foto pertencer a auditoria já existente, ela ficará em conflito para revisão.' +
+          '\nNenhum dado será sincronizado automaticamente.' + missing)) {
         status.textContent = 'Restauração cancelada. Nenhum registro alterado.';
         return;
       }
