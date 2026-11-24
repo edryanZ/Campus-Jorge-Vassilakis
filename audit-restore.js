@@ -112,7 +112,12 @@ const AUDIT_RESTORE = (() => {
     for (const audit of manifest.audits) {
       if (!validId(audit.environmentId) ||
           !['DRAFT', 'IN_PROGRESS', 'COMPLETED'].includes(audit.status) ||
-          (audit.ownerId != null && !validId(audit.ownerId)))
+          (audit.ownerId != null && !validId(audit.ownerId)) ||
+          !audit.data || typeof audit.data !== 'object' || Array.isArray(audit.data) ||
+          (audit.evidenceIds != null && !Array.isArray(audit.evidenceIds)) ||
+          (audit.nonConformities != null && !Array.isArray(audit.nonConformities)) ||
+          (audit.reviewedSteps != null &&
+            (typeof audit.reviewedSteps !== 'object' || Array.isArray(audit.reviewedSteps))))
         throw Error('Auditoria com ambiente, status ou proprietário inválido.');
     }
     const used = new Set(['manifest.json']);
@@ -145,7 +150,7 @@ const AUDIT_RESTORE = (() => {
     try { parsed = JSON.parse(await entries.get('manifest.json').text()); }
     catch (_error) { throw Error('Manifesto JSON ilegível.'); }
     const manifest = readManifest(parsed, entries);
-    return { manifest, entries, audits: manifest.audits.length,
+    return { archive: file, manifest, entries, audits: manifest.audits.length,
       photos: manifest.evidence.filter(item => item.hasLocalPhoto).length,
       missingPhotos: manifest.evidence.filter(item => !item.hasLocalPhoto).length };
   }
@@ -159,7 +164,8 @@ const AUDIT_RESTORE = (() => {
   }
   async function restore(file, preview = null) {
     const before = await authorizedUser();
-    const inspected = preview || await inspect(file);
+    // Um resumo produzido para outro arquivo não autoriza importar bytes diferentes.
+    const inspected = preview?.archive === file ? preview : await inspect(file);
     const currentDevice = 'LOCAL:' + await AUDIT_STORAGE.getDeviceId();
     for (const audit of inspected.manifest.audits) {
       if ((!before.access.admin && audit.ownerId && audit.ownerId !== before.user.id) ||
