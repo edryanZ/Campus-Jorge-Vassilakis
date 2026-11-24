@@ -1,11 +1,11 @@
 'use strict';
 
-const CACHE_NAME = 'campus-auditoria-v16-5-5-integridade-acesso';
+const CACHE_NAME = 'campus-auditoria-v16-5-6-recuperacao-zip';
 const APP_CACHE_PREFIX = 'campus-auditoria-';
 const LOCAL_ASSETS = [
   './', './index.html', './styles.css', './app.js', './campus-data.js',
   './audit-data.js', './audit-storage.js', './audit-sync-core.js', './audit-remote.js', './audit-app.js',
-  './campus-insights.js', './patrimonio.js', './audit-validation.js', './audit-backup.js',
+  './campus-insights.js', './patrimonio.js', './audit-validation.js', './audit-backup.js', './audit-restore.js',
   './supabase-config.js', './manifest.webmanifest'
 ];
 const SUPABASE_SDK = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3/dist/umd/supabase.min.js';
