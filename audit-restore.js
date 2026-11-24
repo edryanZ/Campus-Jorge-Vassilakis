@@ -108,7 +108,8 @@ const AUDIT_RESTORE = (() => {
     uniqueIds(manifest.audits, 'auditId');
     uniqueIds(manifest.evidence, 'evidenceId');
     uniqueIds(manifest.conflicts, 'conflictId');
-    const audits = new Set(manifest.audits.map(audit => audit.auditId));
+    const auditById = new Map(manifest.audits.map(audit => [audit.auditId, audit]));
+    const audits = new Set(auditById.keys());
     for (const audit of manifest.audits) {
       if (!validId(audit.environmentId) ||
           !['DRAFT', 'IN_PROGRESS', 'COMPLETED'].includes(audit.status) ||
@@ -123,15 +124,19 @@ const AUDIT_RESTORE = (() => {
     const used = new Set(['manifest.json']);
     for (const evidence of manifest.evidence) {
       if (!audits.has(evidence.auditId) ||
-          (evidence.ownerId != null && !validId(evidence.ownerId)))
-        throw Error('Evidência sem auditoria válida.');
+          (evidence.ownerId != null && !validId(evidence.ownerId)) ||
+          (evidence.ownerId != null && evidence.ownerId !== auditById.get(evidence.auditId).ownerId))
+        throw Error('Evidência sem auditoria válida ou com proprietário divergente.');
       if (!evidence.hasLocalPhoto) {
         if (evidence.archivePath) throw Error('Fotografia ausente possui caminho ZIP indevido.');
         continue;
       }
+      const safe = id => String(id).replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 160);
+      const prefix = 'fotografias/' + safe(evidence.auditId) + '/' + safe(evidence.evidenceId) + '.';
       if (typeof evidence.archivePath !== 'string' ||
+          !evidence.archivePath.startsWith(prefix) ||
           !entries.has(evidence.archivePath) || used.has(evidence.archivePath))
-        throw Error('Arquivo de fotografia ausente ou repetido.');
+        throw Error('Arquivo de fotografia ausente, repetido ou vinculado ao ID incorreto.');
       used.add(evidence.archivePath);
       const photo = entries.get(evidence.archivePath);
       // V1 antigo sem campo de tamanho: o CRC do ZIP ainda é obrigatório.
@@ -179,16 +184,29 @@ const AUDIT_RESTORE = (() => {
     const all = await Promise.all([
       AUDIT_STORAGE.listAudits(), AUDIT_STORAGE.listEvidence(), AUDIT_STORAGE.listConflicts()
     ]);
-    const existingAudits = new Set(all[0].map(r => r.auditId));
+    const existingAudits = new Map(all[0].map(r => [r.auditId, r]));
     const existingEvidence = new Set(all[1].map(r => r.evidenceId));
     const existingConflicts = new Set(all[2].map(r => r.conflictId));
     const audits = inspected.manifest.audits.filter(r => !existingAudits.has(r.auditId));
     const ids = new Set(audits.map(a => a.auditId));
-    const evidence = inspected.manifest.evidence.filter(r => ids.has(r.auditId));
-    const conflicts = inspected.manifest.conflicts.filter(r => ids.has(r.sourceAuditId));
-    if (evidence.some(r => existingEvidence.has(r.evidenceId)) ||
-        conflicts.some(r => existingConflicts.has(r.conflictId)))
-      throw Error('IDs já existentes em outros registros: importação cancelada sem sobrescrever.');
+    const sourceAudits = new Map(inspected.manifest.audits.map(r => [r.auditId, r]));
+    const evidence = inspected.manifest.evidence.filter(item => {
+      // Um arquivo de backup nunca substitui uma foto já cadastrada.
+      if (existingEvidence.has(item.evidenceId)) return false;
+      if (ids.has(item.auditId)) return true;
+      // Recuperar uma evidência ausente de auditoria que já existe é seguro
+      // somente com mesmo ambiente, mesmo proprietário e vínculo prévio no registro.
+      const current = existingAudits.get(item.auditId);
+      const source = sourceAudits.get(item.auditId);
+      if (!current || !source) return false;
+      if (current.environmentId !== source.environmentId ||
+          (current.ownerId || null) !== (source.ownerId || null) ||
+          (current.localOwnerKey || null) !== (source.localOwnerKey || null))
+        throw Error('A auditoria existente diverge do backup: importação cancelada sem sobrescrever.');
+      return Array.isArray(current.evidenceIds) && current.evidenceIds.includes(item.evidenceId);
+    });
+    const conflicts = inspected.manifest.conflicts.filter(r =>
+      ids.has(r.sourceAuditId) && !existingConflicts.has(r.conflictId));
     const preparedAudits = audits.map(record => ({
       ...structuredClone(record),
       // Reconciliação manual obrigatória; nunca iniciar upload ou publicar
@@ -213,8 +231,9 @@ const AUDIT_RESTORE = (() => {
     const after = await authorizedUser();
     if (after.user.id !== before.user.id || after.access.admin !== before.access.admin)
       throw Error('A conta mudou durante a importação: operação cancelada.');
-    if (!preparedAudits.length) return { imported: 0, ignored: inspected.audits, photos: 0,
-      missingPhotos: inspected.missingPhotos };
+    if (!preparedAudits.length && !preparedEvidence.length && !conflicts.length)
+      return { imported: 0, ignored: inspected.audits, photos: 0,
+        missingPhotos: inspected.missingPhotos };
     // Não ler dados nem esperar chamadas externas enquanto a transação está aberta.
     const db = await AUDIT_STORAGE.openDatabase();
     await new Promise((resolve, reject) => {
@@ -226,8 +245,7 @@ const AUDIT_RESTORE = (() => {
       for (const record of conflicts) tx.objectStore('conflicts').add(structuredClone(record));
     });
     window.dispatchEvent(new Event('audit:local-updated'));
-    return { imported: preparedAudits.length, ignored: existingAudits.size
-      ? inspected.audits - preparedAudits.length : 0,
+    return { imported: preparedAudits.length, ignored: inspected.audits - preparedAudits.length,
       photos: preparedEvidence.filter(item => item.blob).length,
       missingPhotos: preparedEvidence.filter(item => !item.blob).length };
   }
@@ -250,7 +268,7 @@ const AUDIT_RESTORE = (() => {
       }
       status.textContent = 'Restaurando apenas registros ausentes no dispositivo…';
       const result = await restore(file, preview);
-      status.textContent = 'Restauração concluída: ' + result.imported + ' auditoria(s), ' +
+      status.textContent = 'Restauração concluída: ' + result.imported + ' auditoria(s) nova(s), ' +
         result.photos + ' fotografia(s) recuperada(s), ' + result.ignored +
         ' auditoria(s) existente(s) preservada(s).' +
         (result.missingPhotos ? ' Atenção: ' + result.missingPhotos + ' foto(s) sem arquivo no backup.' : '') +
