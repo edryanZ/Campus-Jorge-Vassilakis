@@ -155,3 +155,13 @@ Relatório complementar: `docs/revisao-sincronizacao-v16-2-2026-10-28.md`.
 - Atualizada a versão de cache da PWA para distribuir os novos módulos a dispositivos que já utilizaram o aplicativo.
 - Sem migrações SQL, sem alterações em auditorias, fotos, mapa, IDs, permissões ou GitHub Actions.
 - Os testes simulados não substituem a validação autenticada ponta a ponta e em aparelhos reais.
+
+## 24/11/2026 — Etapa 4: segurança de backup e restauração v16.5.6 (branch isolada)
+
+- Criado leitor seguro para o ZIP V1 do CJV: verificação estrutural, CRC-32 de cada foto, controle de limites, vínculos e dono dos registros.
+- Implementada restauração apenas de auditorias ausentes: uma transação IndexedDB adiciona manifesto, fotos e conflitos sem sobrescrever dados existentes. Os registros importados ficam em estado CONFLICT para revisão antes de qualquer sincronização.
+- Incluído botão com seleção de ZIP e confirmação explícita em Minha conta, restrito a usuários aprovados, sem upload do arquivo.
+- O retorno do Supabase após pausa passa a retomar a sincronização pendente somente depois de revalidar a autorização.
+- Cache PWA atualizado para v16.5.6. Nenhuma tabela, política RLS, auditoria remota ou fluxo de produção foi alterado nesta branch.
+- Alertas Supabase revisados: funções SECURITY DEFINER, RLS de tabela usada por RPC e múltiplas políticas UPDATE não devem ser alterados automaticamente sem testes autenticados. A proteção de senhas vazadas depende de configuração/plano.
+- Validações de navegador real, foto HEIC e restauração a partir de cópia antiga em Android seguem necessárias antes de implantação.
