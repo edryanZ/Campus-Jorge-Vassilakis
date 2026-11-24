@@ -101,3 +101,21 @@ test('recuperação parcial não escreve em cima do registro local', async () =>
   assert.equal(fake.writes.length, 0);
   assert.equal(fake.get().data.lighting.led, '5');
 });
+
+test('confirmação remota tardia não desfaz proteção de fotografia restaurada', async () => {
+  const current = {
+    ...structuredClone(local),
+    syncState: 'CONFLICT', restoreReviewRequired: true,
+    syncError: 'DADO FICTÍCIO PARA TESTE: revisão da restauração pendente'
+  };
+  const fake = fakeStore(current);
+  const method = extract('  async function saveRemoteAcknowledgment(record, sentMutationId)',
+    '  // Uma consulta remota', 'saveRemoteAcknowledgment', fake.db);
+  const remote = { ...structuredClone(local), syncState: 'SYNCED', restoreReviewRequired: false };
+  const result = await method(remote, current.mutationId);
+  assert.equal(result.superseded, true);
+  assert.equal(result.audit.syncState, 'CONFLICT');
+  assert.equal(result.audit.restoreReviewRequired, true);
+  assert.equal(fake.get().syncError, current.syncError);
+  assert.equal(fake.get().data.identification.inspector, current.data.identification.inspector);
+});
