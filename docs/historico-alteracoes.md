@@ -165,3 +165,5 @@ Relatório complementar: `docs/revisao-sincronizacao-v16-2-2026-10-28.md`.
 - Cache PWA atualizado para v16.5.6. Nenhuma tabela, política RLS, auditoria remota ou fluxo de produção foi alterado nesta branch.
 - Alertas Supabase revisados: funções SECURITY DEFINER, RLS de tabela usada por RPC e múltiplas políticas UPDATE não devem ser alterados automaticamente sem testes autenticados. A proteção de senhas vazadas depende de configuração/plano.
 - Validações de navegador real, foto HEIC e restauração a partir de cópia antiga em Android seguem necessárias antes de implantação.
+
+- Verificações simuladas do módulo de ZIP em V8: criação/inspeção de ZIP com foto intacta, importação local aditiva, repetição sem sobrescrever, recusa de CRC corrompido, IDs duplicados, conta divergente e arquivo de foto ausente; inspeção de metadados sem bytes. A suíte Node e Android real continuam pendentes.
