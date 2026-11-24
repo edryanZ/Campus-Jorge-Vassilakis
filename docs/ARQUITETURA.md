@@ -7,7 +7,8 @@ O sistema do Campus Jorge Vassilakis é uma aplicação estática HTML/CSS/JavaS
 - `audit-data.js`, `audit-validation.js`, `audit-app.js`: formulário, navegação e revisão das coletas.
 - `audit-storage.js`: IndexedDB local, versão 3, com stores `audits`, `evidence`, `meta`, `conflicts`.
 - `audit-sync-core.js`, `audit-remote.js`: mutações, conflitos, sessões e sincronização Supabase.
-- `audit-backup.js`: ZIP local com manifesto e arquivos de evidências disponíveis (não é restaurador automático).
+- `audit-backup.js`: exportação de ZIP local com manifesto e bytes das evidências disponíveis.
+- `audit-restore.js`: importação manual de ZIP verificado, estritamente aditiva e atômica no IndexedDB; nunca sincroniza dados restaurados automaticamente.
 - `campus-insights.js`, `patrimonio.js`: indicadores exploratórios e inventário auxiliar.
 - `sw.js`: cache restrito aos recursos públicos estáticos do aplicativo.
 

@@ -350,6 +350,9 @@
         <button id="retryAccessBtn" class="audit-secondary" type="button" hidden>Revalidar permissões</button>
         <button id="exportAuditBackupBtn" class="audit-secondary" type="button" hidden>Exportar backup de auditorias com fotos (ZIP)</button>
         <p id="auditBackupStatus" class="audit-note" role="status" aria-live="polite">O backup não publica nem altera suas auditorias.</p>
+        <button id="restoreAuditBackupBtn" class="audit-secondary" type="button" hidden>Restaurar backup ZIP neste dispositivo</button>
+        <input id="restoreAuditBackupInput" type="file" accept=".zip,application/zip" hidden aria-label="Selecionar backup ZIP do CJV" />
+        <p id="restoreAuditBackupStatus" class="audit-note" role="status" aria-live="polite">Restauração com verificação de integridade: não substitui registros existentes e não envia dados automaticamente.</p>
         <p class="audit-note">A consulta de resultados <strong>publicados</strong> é livre. Para criar ou editar auditorias é necessário ter conta aprovada. Registros antigos deste dispositivo não serão apagados.</p>
         <section id="adminRequestsPanel" class="admin-requests" hidden>
           <h3>Gerenciar acessos</h3>
@@ -416,6 +419,7 @@
   <script src="app.js"></script>
   <script src="audit-app.js"></script>
   <script src="audit-backup.js"></script>
+  <script src="audit-restore.js"></script>
   <script src="campus-insights.js"></script>
   <script src="patrimonio.js"></script>
   <script>

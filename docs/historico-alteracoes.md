@@ -155,3 +155,22 @@ Relatório complementar: `docs/revisao-sincronizacao-v16-2-2026-10-28.md`.
 - Atualizada a versão de cache da PWA para distribuir os novos módulos a dispositivos que já utilizaram o aplicativo.
 - Sem migrações SQL, sem alterações em auditorias, fotos, mapa, IDs, permissões ou GitHub Actions.
 - Os testes simulados não substituem a validação autenticada ponta a ponta e em aparelhos reais.
+
+## 24/11/2026 — Etapa 4: segurança de backup e restauração v16.5.6 (branch isolada)
+
+- Criado leitor seguro para o ZIP V1 do CJV: verificação estrutural, CRC-32 de cada foto, controle de limites, vínculos e dono dos registros.
+- Implementada restauração apenas de auditorias ausentes: uma transação IndexedDB adiciona manifesto, fotos e conflitos sem sobrescrever dados existentes. Os registros importados ficam em estado CONFLICT para revisão antes de qualquer sincronização.
+- Incluído botão com seleção de ZIP e confirmação explícita em Minha conta, restrito a usuários aprovados, sem upload do arquivo.
+- O retorno do Supabase após pausa passa a retomar a sincronização pendente somente depois de revalidar a autorização.
+- Cache PWA atualizado para v16.5.6. Nenhuma tabela, política RLS, auditoria remota ou fluxo de produção foi alterado nesta branch.
+- Alertas Supabase revisados: funções SECURITY DEFINER, RLS de tabela usada por RPC e múltiplas políticas UPDATE não devem ser alterados automaticamente sem testes autenticados. A proteção de senhas vazadas depende de configuração/plano.
+- Validações de navegador real, foto HEIC e restauração a partir de cópia antiga em Android seguem necessárias antes de implantação.
+
+- Verificações simuladas do módulo de ZIP em V8: criação/inspeção de ZIP com foto intacta, importação local aditiva, repetição sem sobrescrever, recusa de CRC corrompido, IDs duplicados, conta divergente e arquivo de foto ausente; inspeção de metadados sem bytes. A suíte Node e Android real continuam pendentes.
+
+## 24/11/2026 — Etapa 5: homologação e lançamento controlado da restauração v16.5.6
+
+- 36 cenários de regressão simulados executados e aprovados em JavaScript V8: 13 de recuperação ZIP, 5 de acesso administrativo, 11 de rascunhos antigos e 7 de respostas parciais. A execução da suíte Node completa e de testes em celular real continua pendente.
+- Validada a sintaxe dos 13 módulos JavaScript, a presença dos arquivos da aplicação e a atualização do cache PWA.
+- Correções adicionais: manifesto de backup usa o tamanho real do Blob, ZIPs antigos sem tamanho de fotografia são recuperáveis com CRC confirmado, e o ZIP é revalidado após confirmação do usuário. Teste de acesso atualizado para só iniciar sincronização após autorização.
+- Consulte `docs/etapa-5-homologacao-v16-5-6-20261124.md` para critérios de teste, limites e cuidados.

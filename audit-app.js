@@ -1119,6 +1119,7 @@ const AUDIT_APP = (() => {
   const syncNowButton = document.getElementById('syncNowBtn');
   const retryAccessButton = document.getElementById('retryAccessBtn');
   const exportBackupButton = document.getElementById('exportAuditBackupBtn');
+  const restoreBackupButton = document.getElementById('restoreAuditBackupBtn');
   const adminPanel = document.getElementById('adminRequestsPanel');
   const adminList = document.getElementById('accountRequestsList');
   const adminStatus = document.getElementById('accountRequestsStatus');
@@ -1269,6 +1270,7 @@ const AUDIT_APP = (() => {
     signOutButton.hidden = !authenticated;
     retryAccessButton.hidden = !authenticated;
     exportBackupButton.hidden = true;
+    restoreBackupButton.hidden = true;
     syncNowButton.hidden = true;
     adminPanel.hidden = true;
     currentAccess = null;
@@ -1299,6 +1301,7 @@ const AUDIT_APP = (() => {
       window.dispatchEvent(new CustomEvent('audit:access-updated', { detail: { authorized: Boolean(access?.canAudit) } }));
       if (access?.canAudit) {
         exportBackupButton.hidden = false;
+        restoreBackupButton.hidden = false;
         authStatus.className = 'auth-status is-success';
         authStatus.textContent = message || `Conta autorizada (${access.admin ? 'Administrador' : 'Auditor'})${access.offline ? ' · autorização offline temporária' : ''}.`;
         syncNowButton.hidden = Boolean(access.offline);
@@ -1337,6 +1340,12 @@ const AUDIT_APP = (() => {
       const user = await AUDIT_REMOTE.sessionUser();
       if (user?.id !== expectedUserId || currentSessionUserId !== expectedUserId) return;
       await setAuthState(user, '', { forceRefresh: true });
+      if (currentSessionUserId === expectedUserId && currentAccess?.canAudit && !currentAccess.offline) {
+        // O evento 'online' não dispara quando um projeto Supabase pausado retorna.
+        // Reenviar apenas após recuperar efetivamente a autorização no servidor.
+        AUDIT_REMOTE.syncPending().catch(error =>
+          console.warn('[AuditAuth] Retomada da sincronização pendente:', error));
+      }
     } catch (error) {
       console.warn('[AuditAuth] Revalidação temporária indisponível:', error);
     } finally {

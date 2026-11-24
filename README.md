@@ -1,4 +1,4 @@
-# Mapa interativo – Campus Jorge Vassilakis (main v16.3; branch de testes v16.5.3)
+# Mapa interativo – Campus Jorge Vassilakis (v16.5.6 — recuperação segura)
 
 Mapa estático e interativo em HTML, CSS, JavaScript e SVG, criado com base na planta de referência e nas informações confirmadas do Campus Jorge Vassilakis.
 
@@ -186,7 +186,7 @@ As correções foram preparadas e testadas na branch `fix-auditoria-sincronizaca
 
 - Antes de concluir, o auditor precisa confirmar explicitamente cada uma das sete etapas temáticas, preencher seu nome, data e conclusão. Itens sem avaliação devem ser justificados em Observações; rascunhos antigos continuam disponíveis para revisão.
 - A aplicação tenta gravar imediatamente no IndexedDB quando a página perde visibilidade ou é suspensa. Quando há alterações ou fotografias pendentes, solicita aviso ao sair, dentro das limitações do navegador. Isso **não** substitui o backup.
-- Em **Minha conta**, uma conta aprovada pode exportar um **ZIP com auditorias, revisões locais em conflito e arquivos de fotografias disponíveis** neste dispositivo. Se um arquivo fotográfico estiver ausente, o aviso informa que o backup não é completo. ZIP é confidencial e sem criptografia; guarde-o em lugar seguro. A restauração ainda exige procedimento manual e não deve substituir automaticamente o servidor.
+- Em **Minha conta**, uma conta aprovada pode exportar um **ZIP com auditorias, revisões locais em conflito e arquivos de fotografias disponíveis** neste dispositivo. Se um arquivo fotográfico estiver ausente, o aviso informa que o backup não é completo. ZIP é confidencial e sem criptografia; guarde-o em lugar seguro. A restauração está disponível em **Minha conta → Restaurar backup ZIP neste dispositivo**: exige confirmação, verifica CRC-32 e adiciona somente auditorias ausentes. Registros restaurados permanecem em conflito para conferência, sem sincronização automática. Não use backups para sobrescrever dados existentes.
 - A importação automática do Supabase é limitada às auditorias do proprietário autenticado. Administradores podem consultar outros usuários na Central, sem fazer cópias locais indiscriminadas.
 - **Retificação de RLS:** políticas v16.1 verificadas são RESTRICTIVE e restringem o acesso por proprietário ou ADMIN. O diagnóstico que sugeria exposição generalizada foi corrigido e o SQL de remoção cancelado. Nenhuma política do banco de produção foi alterada.
 - O domínio de produção, a câmera de um aparelho real e as credenciais do administrador ainda precisam de teste antes da publicação.
@@ -229,3 +229,13 @@ Não houve alteração de dados do banco, fotos, salas, identificadores nem publ
 - Foram executados 66 cenários de lógica/estrutura em ambiente de simulação JavaScript, incluindo novas regressões de conclusão, sessão e colaboração. Não substituem teste E2E, autenticação real nem câmera Android.
 
 O estado da `main` e os registros do Supabase permanecem intocados. Não limpar os dados do navegador de origem antes de conferir coletas e evidências.
+
+## Etapa 4 — Backup e restauração v16.5.6 (24/11/2026)
+
+O ZIP exportado com **Minha conta → Exportar backup** contém auditorias e bytes das fotos disponíveis neste navegador. Para recuperá-lo, entre com uma conta aprovada e escolha **Restaurar backup ZIP neste dispositivo**. Antes da confirmação, o site verifica a integridade de todos os arquivos e o vínculo com o manifesto.
+
+A importação só adiciona auditorias ainda ausentes no IndexedDB. Não sobrescreve rascunhos, registros concluídos ou fotografias existentes, não publica dados e não envia o backup para a internet. Os dados importados ficam com estado `CONFLICT`: é indispensável conferir a coleta e reconciliar manualmente com o Supabase antes de tentar sincronizar. Arquivos ZIP incompletos, corrompidos ou de outra conta são rejeitados quando não autorizados. Fotografias que não estavam no ZIP continuam ausentes e são avisadas.
+
+O arquivo é confidencial e **não criptografado**. Guarde uma cópia fora do navegador, não encaminhe publicamente e não limpe o armazenamento do dispositivo original antes de conferir os dados. O teste automatizado inclui ZIP com foto, CRC adulterado, duplicidades, conta diferente e evidência ausente; **restauração no Android real e testes de login autenticado ainda são necessários**.
+
+A homologação parcial da restauração e suas limitações estão documentadas em [Etapa 5 — homologação v16.5.6](docs/etapa-5-homologacao-v16-5-6-20261124.md). Os testes em V8 não substituem `node --test` nem testes reais no celular.
