@@ -105,6 +105,9 @@ const AUDIT_BACKUP = (() => {
       delete result.blob;
       result.hasLocalPhoto = entry.blob instanceof Blob;
       if (result.hasLocalPhoto) {
+        // Backups antigos podem não conter o campo size na evidência;
+        // os bytes reais têm prioridade no manifesto exportado.
+        result.size = entry.blob.size;
         // Extensão coerente com o formato real para abrir a imagem fora do app.
         const imageExtensions = {
           'image/jpeg': '.jpg', 'image/png': '.png',
