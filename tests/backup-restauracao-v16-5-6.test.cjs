@@ -173,3 +173,23 @@ test('o frontend expõe apenas restauração manual e mantém cache compatível'
   assert.match(sw, /\.\/audit-restore\.js/);
   assert.match(app, /restoreBackupButton\.hidden = !?false/);
 });
+
+test('resumo de outro ZIP não permite ignorar validação da integridade', async () => {
+  const f = fixture(), original = await f.zip();
+  const preview = await f.context.AUDIT_RESTORE.inspect(original);
+  const bytes = new Uint8Array(await original.arrayBuffer());
+  const needle = new TextEncoder().encode('DADO FICTÍCIO PARA TESTE');
+  const pos = bytes.findIndex((v, i) =>
+    v === needle[0] && needle.every((part, j) => bytes[i + j] === part));
+  assert.ok(pos > 0);
+  bytes[pos] ^= 1;
+  await assert.rejects(f.context.AUDIT_RESTORE.restore(new Blob([bytes]), preview), /CRC-32/);
+  assert.equal(f.stores.audits.length, 0);
+});
+
+test('manifesto sem estrutura de respostas válida é recusado', async () => {
+  const f = fixture(), broken = clone(f.manifest);
+  broken.audits[0].data = null;
+  await assert.rejects(f.context.AUDIT_RESTORE.inspect(await f.zip(broken)), /inválido/);
+  assert.equal(f.stores.audits.length, 0);
+});
