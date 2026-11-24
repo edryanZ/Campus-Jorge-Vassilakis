@@ -194,6 +194,9 @@ const AUDIT_RESTORE = (() => {
       // Um arquivo de backup nunca substitui uma foto já cadastrada.
       if (existingEvidence.has(item.evidenceId)) return false;
       if (ids.has(item.auditId)) return true;
+      // Sem bytes para recuperar, não colocar um registro já existente em
+      // quarentena apenas por metadados de uma foto indisponível no ZIP.
+      if (!item.hasLocalPhoto) return false;
       // Recuperar uma evidência ausente de auditoria que já existe é seguro
       // somente com mesmo ambiente, mesmo proprietário e vínculo prévio no registro.
       const current = existingAudits.get(item.auditId);
@@ -265,7 +268,9 @@ const AUDIT_RESTORE = (() => {
           // exatamente o atual. CONFLICT bloqueia qualquer envio automático.
           auditStore.put({
             ...current, syncState: 'CONFLICT', restoreReviewRequired: true,
-            syncError: 'Fotografia recuperada do ZIP; confira antes de sincronizar.'
+            syncError: current.syncState === 'CONFLICT' && current.syncError
+              ? current.syncError
+              : 'Fotografia recuperada do ZIP; confira antes de sincronizar.'
           });
         };
       }
