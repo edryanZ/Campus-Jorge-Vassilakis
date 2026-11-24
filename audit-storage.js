@@ -155,17 +155,21 @@ const AUDIT_STORAGE = (() => {
         // for o mesmo. Sinalizar divergência para análise manual.
         const missingAnswers = Boolean(current &&
           AUDIT_SYNC_CORE.hasMissingCollectedAnswers(current, remote));
-        superseded = Boolean(current && current.mutationId !== sentMutationId) || missingAnswers;
+        // Uma recuperação de fotografia pode acontecer enquanto uma RPC anterior
+        // ainda responde. Nenhuma confirmação tardia deve remover a quarentena.
+        const restorationHold = Boolean(current?.restoreReviewRequired);
+        superseded = Boolean(current && current.mutationId !== sentMutationId) ||
+          missingAnswers || restorationHold;
         result = superseded ? {
           ...current,
           ownerId: current.ownerId || remote.ownerId,
           localOwnerKey: current.ownerId || remote.ownerId ? null : current.localOwnerKey,
           serverRevision: Math.max(Number(current.serverRevision || 0), Number(remote.serverRevision || 0)),
           lastSyncedAt: remote.lastSyncedAt || current.lastSyncedAt,
-          syncState: missingAnswers || current.syncState === 'CONFLICT' ? 'CONFLICT' : 'PENDING',
+          syncState: missingAnswers || restorationHold || current.syncState === 'CONFLICT' ? 'CONFLICT' : 'PENDING',
           syncError: missingAnswers
             ? 'A confirmação remota não contém respostas locais; dados preservados para comparação.'
-            : current.syncState === 'CONFLICT' ? current.syncError : null
+            : restorationHold || current.syncState === 'CONFLICT' ? current.syncError : null
         } : remote;
         const put = store.put(result);
         put.onerror = () => { failure = put.error; tx.abort(); };
