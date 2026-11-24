@@ -1,4 +1,4 @@
-# Mapa interativo – Campus Jorge Vassilakis (v16.5.6 — recuperação segura)
+# Mapa interativo – Campus Jorge Vassilakis (produção v16.5.6; testes de estabilidade v16.5.7)
 
 Mapa estático e interativo em HTML, CSS, JavaScript e SVG, criado com base na planta de referência e nas informações confirmadas do Campus Jorge Vassilakis.
 
@@ -239,3 +239,7 @@ A importação só adiciona auditorias ainda ausentes no IndexedDB. Não sobresc
 O arquivo é confidencial e **não criptografado**. Guarde uma cópia fora do navegador, não encaminhe publicamente e não limpe o armazenamento do dispositivo original antes de conferir os dados. O teste automatizado inclui ZIP com foto, CRC adulterado, duplicidades, conta diferente e evidência ausente; **restauração no Android real e testes de login autenticado ainda são necessários**.
 
 A homologação parcial da restauração e suas limitações estão documentadas em [Etapa 5 — homologação v16.5.6](docs/etapa-5-homologacao-v16-5-6-20261124.md). Os testes em V8 não substituem `node --test` nem testes reais no celular.
+
+## Etapa 6 — Estabilidade e recuperação de fotografias (24/11/2026)
+
+A branch `fix-cjv-etapa6-fotos-auditorias-existentes-20261124` corrige a restauração de fotos **que não existem no IndexedDB**, mesmo quando a auditoria já existe. Em auditoria existente, o conteúdo da coleta é mantido e o estado fica em `CONFLICT` para impedir sincronização automática. Confira o [relatório da etapa 6](docs/etapa-6-validacao-estabilidade-20261124.md) antes de usar em produção. O arquivo ZIP continua confidencial e sem criptografia.
