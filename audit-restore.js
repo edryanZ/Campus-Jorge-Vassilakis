@@ -207,6 +207,8 @@ const AUDIT_RESTORE = (() => {
     });
     const conflicts = inspected.manifest.conflicts.filter(r =>
       ids.has(r.sourceAuditId) && !existingConflicts.has(r.conflictId));
+    const existingPhotoTargets = [...new Set(evidence
+      .filter(item => !ids.has(item.auditId)).map(item => item.auditId))];
     const preparedAudits = audits.map(record => ({
       ...structuredClone(record),
       // Reconciliação manual obrigatória; nunca iniciar upload ou publicar
@@ -238,9 +240,36 @@ const AUDIT_RESTORE = (() => {
     const db = await AUDIT_STORAGE.openDatabase();
     await new Promise((resolve, reject) => {
       const tx = db.transaction(['audits', 'evidence', 'conflicts'], 'readwrite');
+      const auditStore = tx.objectStore('audits');
       tx.oncomplete = resolve;
       tx.onabort = () => reject(tx.error || Error('Importação cancelada; nenhuma alteração foi gravada.'));
-      for (const record of preparedAudits) tx.objectStore('audits').add(record);
+      for (const id of existingPhotoTargets) {
+        // Conferir a versão real dentro da transação: uma coleta pode ter
+        // mudado depois da prévia; nunca salvar um snapshot antigo por cima dela.
+        const check = auditStore.get(id);
+        check.onerror = () => tx.abort();
+        check.onsuccess = () => {
+          const current = check.result;
+          const original = sourceAudits.get(id);
+          const evidenceIds = evidence.filter(item => item.auditId === id).map(item => item.evidenceId);
+          if (!current || !original ||
+              current.environmentId !== original.environmentId ||
+              (current.ownerId || null) !== (original.ownerId || null) ||
+              (current.localOwnerKey || null) !== (original.localOwnerKey || null) ||
+              !evidenceIds.every(evidenceId =>
+                Array.isArray(current.evidenceIds) && current.evidenceIds.includes(evidenceId))) {
+            tx.abort();
+            return;
+          }
+          // Apenas metadados de proteção mudam. O conteúdo coletado permanece
+          // exatamente o atual. CONFLICT bloqueia qualquer envio automático.
+          auditStore.put({
+            ...current, syncState: 'CONFLICT', restoreReviewRequired: true,
+            syncError: 'Fotografia recuperada do ZIP; confira antes de sincronizar.'
+          });
+        };
+      }
+      for (const record of preparedAudits) auditStore.add(record);
       for (const record of preparedEvidence) tx.objectStore('evidence').add(record);
       for (const record of conflicts) tx.objectStore('conflicts').add(structuredClone(record));
     });
