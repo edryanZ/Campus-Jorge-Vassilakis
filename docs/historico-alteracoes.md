@@ -174,3 +174,12 @@ Relatório complementar: `docs/revisao-sincronizacao-v16-2-2026-10-28.md`.
 - Validada a sintaxe dos 13 módulos JavaScript, a presença dos arquivos da aplicação e a atualização do cache PWA.
 - Correções adicionais: manifesto de backup usa o tamanho real do Blob, ZIPs antigos sem tamanho de fotografia são recuperáveis com CRC confirmado, e o ZIP é revalidado após confirmação do usuário. Teste de acesso atualizado para só iniciar sincronização após autorização.
 - Consulte `docs/etapa-5-homologacao-v16-5-6-20261124.md` para critérios de teste, limites e cuidados.
+
+## 24/11/2026 — Etapa 6: estabilidade de fotos recuperadas (v16.5.7, branch isolada)
+
+- Localizado problema em v16.5.6: o restaurador ignorava fotos de auditorias já existentes no IndexedDB, ainda que faltasse o registro de evidência.
+- Restauração aditiva de foto ausente com auditoria existente: valida ambiente, proprietário, ID referenciado e arquivo ZIP íntegro. Não substitui fotografias ou respostas já cadastradas.
+- A mesma transação IndexedDB insere foto e marca auditoria em conflito, exigindo conferência humana antes de sincronizar. Proteção adicional impede que confirmação RPC tardia limpe o estado de revisão.
+- Mantida preservação de evidências já existentes, incluindo caso sem Blob. Código não realiza alteração de bancos nem de auditorias no Supabase.
+- Testes específicos do importador e de confirmação remota ampliados. Cache PWA atualizado para v16.5.7 para invalidar scripts antigos.
+- Validação com login real, navegador Android e suíte Node completa ainda pendente.
