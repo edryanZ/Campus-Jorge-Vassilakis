@@ -190,7 +190,7 @@ test('o frontend expõe apenas restauração manual e mantém cache compatível'
   const app = read('audit-app.js');
   assert.match(html, /id="restoreAuditBackupBtn"/);
   assert.match(html, /audit-restore\.js/);
-  assert.match(sw, /campus-auditoria-v16-5-6/);
+  assert.match(sw, /campus-auditoria-v16-5-7/);
   assert.match(sw, /\.\/audit-restore\.js/);
   assert.match(app, /restoreBackupButton\.hidden = !?false/);
 });
