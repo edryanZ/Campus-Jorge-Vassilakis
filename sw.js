@@ -1,6 +1,6 @@
 'use strict';
 
-const CACHE_NAME = 'campus-auditoria-v16-5-6-recuperacao-zip';
+const CACHE_NAME = 'campus-auditoria-v16-5-7-fotos-restauradas';
 const APP_CACHE_PREFIX = 'campus-auditoria-';
 const LOCAL_ASSETS = [
   './', './index.html', './styles.css', './app.js', './campus-data.js',
