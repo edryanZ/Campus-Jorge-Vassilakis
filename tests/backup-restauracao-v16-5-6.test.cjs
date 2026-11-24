@@ -215,3 +215,70 @@ test('prévia forjada não evita a conferência do ZIP original', async () => {
   assert.equal(result.imported, 1);
   assert.equal(f.stores.audits[0].auditId, f.manifest.audits[0].auditId);
 });
+
+test('auditoria já existente recebe fotografia faltante sem modificar a coleta', async () => {
+  const f = fixture();
+  const previous = clone(f.manifest.audits[0]);
+  previous.updatedAt = '2026-11-24T13:00:00Z';
+  previous.data.identification.inspector = 'DADO FICTÍCIO PARA TESTE PRESERVADO';
+  f.stores.audits.push(previous);
+  const result = await f.context.AUDIT_RESTORE.restore(await f.zip());
+  assert.equal(result.imported, 0);
+  assert.equal(result.ignored, 1);
+  assert.equal(result.photos, 1);
+  assert.equal(f.stores.audits.length, 1);
+  assert.deepEqual(f.stores.audits[0], previous);
+  assert.equal(f.stores.evidence.length, 1);
+  assert.deepEqual([...new Uint8Array(await f.stores.evidence[0].blob.arrayBuffer())], [...f.photoBytes]);
+});
+
+test('evidência existente não é substituída por cópia do ZIP', async () => {
+  const f = fixture();
+  f.stores.audits.push(clone(f.manifest.audits[0]));
+  f.stores.evidence.push({
+    evidenceId: 'EVIDENCIA-FICTICIA', auditId: 'AUDIT-FICTICIA',
+    blob: new Blob([new Uint8Array([9, 8, 7])]), description: 'FOTO ANTERIOR'
+  });
+  const result = await f.context.AUDIT_RESTORE.restore(await f.zip());
+  assert.equal(result.imported, 0);
+  assert.equal(result.photos, 0);
+  assert.equal(f.stores.evidence.length, 1);
+  assert.equal(f.stores.evidence[0].description, 'FOTO ANTERIOR');
+  assert.deepEqual([...new Uint8Array(await f.stores.evidence[0].blob.arrayBuffer())], [9, 8, 7]);
+});
+
+test('foto sem referência em auditoria existente não é anexada por engano', async () => {
+  const f = fixture();
+  const existing = clone(f.manifest.audits[0]);
+  existing.evidenceIds = [];
+  f.stores.audits.push(existing);
+  const result = await f.context.AUDIT_RESTORE.restore(await f.zip());
+  assert.equal(result.photos, 0);
+  assert.equal(f.stores.evidence.length, 0);
+  assert.deepEqual(f.stores.audits[0], existing);
+});
+
+test('divergência de ambiente em auditoria já existente cancela recuperação de foto', async () => {
+  const f = fixture();
+  const existing = clone(f.manifest.audits[0]);
+  existing.environmentId = 'AMBIENTE-FICTICIO-DIFERENTE';
+  f.stores.audits.push(existing);
+  await assert.rejects(f.context.AUDIT_RESTORE.restore(await f.zip()), /diverge do backup/);
+  assert.equal(f.stores.evidence.length, 0);
+  assert.equal(f.stores.audits[0].environmentId, 'AMBIENTE-FICTICIO-DIFERENTE');
+});
+
+test('proprietário de evidência não pode divergir do proprietário da auditoria', async () => {
+  const f = fixture(), wrong = clone(f.manifest);
+  wrong.evidence[0].ownerId = 'OUTRA-CONTA-FICTICIA';
+  await assert.rejects(f.context.AUDIT_RESTORE.inspect(await f.zip(wrong)), /proprietário divergente/);
+  assert.equal(f.stores.audits.length, 0);
+});
+
+test('caminho de foto não pode ser trocado por caminho de outra evidência', async () => {
+  const f = fixture(), wrong = clone(f.manifest);
+  wrong.evidence[0].archivePath = 'fotografias/AUDIT-FICTICIA/OUTRA-EVIDENCIA.jpg';
+  const archive = await f.zip(wrong, [{ name: wrong.evidence[0].archivePath, blob: new Blob([f.photoBytes]) }]);
+  await assert.rejects(f.context.AUDIT_RESTORE.inspect(archive), /vinculado ao ID incorreto/);
+  assert.equal(f.stores.audits.length, 0);
+});
