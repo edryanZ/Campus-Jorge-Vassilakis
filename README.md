@@ -1,4 +1,4 @@
-# Mapa interativo – Campus Jorge Vassilakis (main v16.5.5; prévia de recuperação v16.5.6)
+# Mapa interativo – Campus Jorge Vassilakis (v16.5.6 — recuperação segura)
 
 Mapa estático e interativo em HTML, CSS, JavaScript e SVG, criado com base na planta de referência e nas informações confirmadas do Campus Jorge Vassilakis.
 
@@ -237,3 +237,5 @@ O ZIP exportado com **Minha conta → Exportar backup** contém auditorias e byt
 A importação só adiciona auditorias ainda ausentes no IndexedDB. Não sobrescreve rascunhos, registros concluídos ou fotografias existentes, não publica dados e não envia o backup para a internet. Os dados importados ficam com estado `CONFLICT`: é indispensável conferir a coleta e reconciliar manualmente com o Supabase antes de tentar sincronizar. Arquivos ZIP incompletos, corrompidos ou de outra conta são rejeitados quando não autorizados. Fotografias que não estavam no ZIP continuam ausentes e são avisadas.
 
 O arquivo é confidencial e **não criptografado**. Guarde uma cópia fora do navegador, não encaminhe publicamente e não limpe o armazenamento do dispositivo original antes de conferir os dados. O teste automatizado inclui ZIP com foto, CRC adulterado, duplicidades, conta diferente e evidência ausente; **restauração no Android real e testes de login autenticado ainda são necessários**.
+
+A homologação parcial da restauração e suas limitações estão documentadas em [Etapa 5 — homologação v16.5.6](docs/etapa-5-homologacao-v16-5-6-20261124.md). Os testes em V8 não substituem `node --test` nem testes reais no celular.
