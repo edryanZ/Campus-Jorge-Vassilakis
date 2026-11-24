@@ -1,4 +1,4 @@
-# Mapa interativo – Campus Jorge Vassilakis (main v16.3; branch de testes v16.5.3)
+# Mapa interativo – Campus Jorge Vassilakis (main v16.5.5; prévia de recuperação v16.5.6)
 
 Mapa estático e interativo em HTML, CSS, JavaScript e SVG, criado com base na planta de referência e nas informações confirmadas do Campus Jorge Vassilakis.
 
