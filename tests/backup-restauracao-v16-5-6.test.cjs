@@ -40,21 +40,42 @@ function fixture({ owner = 'CONTA-FICTICIA', admin = false } = {}) {
             assert.equal(mode, 'readwrite');
             assert.deepEqual(names, ['audits', 'evidence', 'conflicts']);
             const pending = { audits: [], evidence: [], conflicts: [] };
+            const updates = { audits: [], evidence: [], conflicts: [] };
             const ids = { audits: 'auditId', evidence: 'evidenceId', conflicts: 'conflictId' };
+            let aborted = false;
             const tx = {
+              abort() { aborted = true; tx.onabort?.(); },
               objectStore(name) {
-                return { add(record) {
-                  const id = record[ids[name]];
-                  if ([...stores[name], ...pending[name]].some(item => item[ids[name]] === id))
-                    throw new Error('Duplicidade');
-                  pending[name].push(record);
-                } };
+                return {
+                  get(id) {
+                    const request = { result: stores[name].find(item => item[ids[name]] === id) };
+                    queueMicrotask(() => request.onsuccess?.());
+                    return request;
+                  },
+                  put(record) { updates[name].push(record); return {}; },
+                  add(record) {
+                    const id = record[ids[name]];
+                    if ([...stores[name], ...pending[name]].some(item => item[ids[name]] === id))
+                      throw new Error('Duplicidade');
+                    pending[name].push(record);
+                    return {};
+                  }
+                };
               }
             };
-            queueMicrotask(() => {
-              for (const name of names) stores[name].push(...pending[name]);
+            // Simula commit após os callbacks de leitura transacional.
+            queueMicrotask(() => queueMicrotask(() => {
+              if (aborted) return;
+              for (const name of names) {
+                for (const update of updates[name]) {
+                  const index = stores[name].findIndex(item => item[ids[name]] === update[ids[name]]);
+                  if (index < 0) throw new Error('Atualização sem registro');
+                  stores[name][index] = update;
+                }
+                stores[name].push(...pending[name]);
+              }
               tx.oncomplete?.();
-            });
+            }));
             return tx;
           }
         };
@@ -227,7 +248,11 @@ test('auditoria já existente recebe fotografia faltante sem modificar a coleta'
   assert.equal(result.ignored, 1);
   assert.equal(result.photos, 1);
   assert.equal(f.stores.audits.length, 1);
-  assert.deepEqual(f.stores.audits[0], previous);
+  assert.equal(f.stores.audits[0].data.identification.inspector,
+    previous.data.identification.inspector);
+  assert.equal(f.stores.audits[0].updatedAt, previous.updatedAt);
+  assert.equal(f.stores.audits[0].syncState, 'CONFLICT');
+  assert.equal(f.stores.audits[0].restoreReviewRequired, true);
   assert.equal(f.stores.evidence.length, 1);
   assert.deepEqual([...new Uint8Array(await f.stores.evidence[0].blob.arrayBuffer())], [...f.photoBytes]);
 });
