@@ -193,3 +193,25 @@ test('manifesto sem estrutura de respostas válida é recusado', async () => {
   await assert.rejects(f.context.AUDIT_RESTORE.inspect(await f.zip(broken)), /inválido/);
   assert.equal(f.stores.audits.length, 0);
 });
+
+test('ZIP V1 antigo sem tamanho declarado de fotografia preserva bytes e completa metadado', async () => {
+  const f = fixture(), legacy = clone(f.manifest);
+  delete legacy.evidence[0].size;
+  const archive = await f.zip(legacy);
+  const result = await f.context.AUDIT_RESTORE.restore(archive);
+  assert.equal(result.imported, 1);
+  assert.equal(result.photos, 1);
+  assert.equal(f.stores.evidence[0].size, f.photoBytes.length);
+  assert.deepEqual([...new Uint8Array(await f.stores.evidence[0].blob.arrayBuffer())], [...f.photoBytes]);
+});
+
+test('prévia forjada não evita a conferência do ZIP original', async () => {
+  const f = fixture(), archive = await f.zip();
+  const fake = {
+    archive, manifest: { format: 'CAMPUS_AUDIT_BACKUP_V1', audits: [],
+      evidence: [], conflicts: [] }, entries: new Map()
+  };
+  const result = await f.context.AUDIT_RESTORE.restore(archive, fake);
+  assert.equal(result.imported, 1);
+  assert.equal(f.stores.audits[0].auditId, f.manifest.audits[0].auditId);
+});
