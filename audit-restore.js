@@ -134,7 +134,8 @@ const AUDIT_RESTORE = (() => {
         throw Error('Arquivo de fotografia ausente ou repetido.');
       used.add(evidence.archivePath);
       const photo = entries.get(evidence.archivePath);
-      if (Number(evidence.size) !== photo.size)
+      // V1 antigo sem campo de tamanho: o CRC do ZIP ainda é obrigatório.
+      if (evidence.size != null && Number(evidence.size) !== photo.size)
         throw Error('Tamanho da fotografia diferente do manifesto.');
     }
     for (const conflict of manifest.conflicts) {
@@ -165,7 +166,9 @@ const AUDIT_RESTORE = (() => {
   async function restore(file, preview = null) {
     const before = await authorizedUser();
     // Um resumo produzido para outro arquivo não autoriza importar bytes diferentes.
-    const inspected = preview?.archive === file ? preview : await inspect(file);
+    // Reconferir os bytes depois da confirmação: nenhum resumo externo
+    // ou ZIP alterado entre prévia e restauração pode ignorar o CRC.
+    const inspected = await inspect(file);
     const currentDevice = 'LOCAL:' + await AUDIT_STORAGE.getDeviceId();
     for (const audit of inspected.manifest.audits) {
       if ((!before.access.admin && audit.ownerId && audit.ownerId !== before.user.id) ||
@@ -198,7 +201,10 @@ const AUDIT_RESTORE = (() => {
       const copy = { ...structuredClone(item) };
       const photo = item.hasLocalPhoto ? inspected.entries.get(item.archivePath) : null;
       delete copy.hasLocalPhoto; delete copy.archivePath;
-      if (photo) copy.blob = photo.slice(0, photo.size, item.mimeType || 'application/octet-stream');
+      if (photo) {
+        copy.blob = photo.slice(0, photo.size, item.mimeType || 'application/octet-stream');
+        copy.size = photo.size;
+      }
       copy.syncState = photo ? 'PENDING' : 'ERROR';
       copy.syncError = photo ? null : 'Backup sem bytes locais desta fotografia.';
       copy.remoteVerifiedAt = null;
